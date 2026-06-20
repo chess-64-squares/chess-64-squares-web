@@ -8,6 +8,8 @@ export class GameResDto {
     playerWhite: UserResDto;
     playerBlack: UserResDto;
     gameMode: GameModeResDto;
+    playerWhiteElo: number;
+    playerBlackElo: number;
     fen: string;
     status: GameStatus;
     reasonForEnding: ReasonForEnding | null;
