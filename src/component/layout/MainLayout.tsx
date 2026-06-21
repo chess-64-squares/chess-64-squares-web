@@ -23,7 +23,7 @@ export function MainLayout({ token, user, onLogout }: { token: string; user: Use
           ) : (
             <>
               <NavLink className={({ isActive }) => (isActive ? 'nav-link active' : 'nav-link')} to="/login">Sign in</NavLink>
-              <NavLink className="button primary small" to="/register">Register</NavLink>
+              <NavLink className={({ isActive }) => (isActive ? 'nav-link active' : 'nav-link')} to="/register">Register</NavLink>
             </>
           )}
         </nav>

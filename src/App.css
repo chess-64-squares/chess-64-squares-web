@@ -89,10 +89,15 @@
 .nav-link {
   border-radius: 8px;
   padding: 9px 14px;
+  text-decoration: none;
 }
 
-.nav-link.active,
-.nav-link:hover {
+.nav-link.active{
+  background: var(--primary);
+  color: white;
+}
+
+.nav-link:not(.active):hover {
   background: var(--canvas-soft);
 }
 
@@ -349,7 +354,7 @@
 }
 
 .panel.dark {
-  background: var(--ink);
+  background: var(--primary);
   color: var(--canvas);
 }
 
@@ -669,6 +674,11 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.moves-row .move-active {
+  color: var(--primary);
+  font-weight: 800;
 }
 
 .icon-button {

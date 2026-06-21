@@ -45,9 +45,6 @@ export function ProfilePage({
             >
               {[10, 20, 50, 100].map((value) => <option key={value} value={value}>{value}</option>)}
             </select>
-            <button className="button tertiary small" onClick={() => onLoadGames(gamesPage.page, historyLimit)}>
-              Reload
-            </button>
           </div>
         </div>
         <div className="game-list">
@@ -73,8 +70,8 @@ function GameRow({ game, onOpenReplay }: { game: Game; onOpenReplay: (gameId: nu
     <article className="game-row">
       <div>
         <strong>#{game.gameId}</strong>
-        <span className="player-color-line"><ColorSwatch color="white" /> {game.playerWhite.username} ({formatElo(game.playerWhiteElo ?? game.playerWhite.elo, getEloChange(game, 'white'))})</span>
-        <span className="player-color-line"><ColorSwatch color="black" /> {game.playerBlack.username} ({formatElo(game.playerBlackElo ?? game.playerBlack.elo, getEloChange(game, 'black'))})</span>
+        <span className="player-color-line"><ColorSwatch color="white" /> {game.playerWhite.username} {formatElo(game.playerWhiteElo ?? game.playerWhite.elo, getEloChange(game, 'white'))}</span>
+        <span className="player-color-line"><ColorSwatch color="black" /> {game.playerBlack.username} {formatElo(game.playerBlackElo ?? game.playerBlack.elo, getEloChange(game, 'black'))}</span>
       </div>
       <span>{statusLabel(game.status)}</span>
       <span>{reasonLabel(game.reasonForEnding)}</span>

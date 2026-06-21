@@ -44,7 +44,7 @@ export function HistoryPage({
     <section className="play-page replay-page">
       <aside className="match-panel">
         <p className="eyebrow">Replay</p>
-        <h1>Game #{replayGame.gameId}</h1>
+        <h3>Game #{replayGame.gameId}</h3>
         <div className="player-stack">
           <PlayerCard label="White" player={replayGame.playerWhite} snapshotElo={replayGame.playerWhiteElo} eloChange={getEloChange(replayGame, 'white')} active={false} />
           <PlayerCard label="Black" player={replayGame.playerBlack} snapshotElo={replayGame.playerBlackElo} eloChange={getEloChange(replayGame, 'black')} active={false} />
@@ -57,10 +57,10 @@ export function HistoryPage({
 
       <section className="board-area">
         <div className="board-header">
-          <div>
-            <span className="badge">Move {replayIndex} / {replayGame.moves?.length ?? 0}</span>
-            <h2>{replayIndex === 0 ? 'Starting position' : replayGame.moves?.[replayIndex - 1]?.san}</h2>
-          </div>
+          <h1>History</h1>
+        </div>
+        <ChessBoard squares={replaySquares} orientation={orientation} />
+        <div className="board-header">
           <div className="replay-controls">
             <button className="icon-button" title="First" onClick={() => onReplayIndexChange(0)}>«</button>
             <button className="icon-button" title="Previous" onClick={() => onReplayIndexChange((index) => Math.max(0, index - 1))}>‹</button>
@@ -68,13 +68,12 @@ export function HistoryPage({
             <button className="icon-button" title="Last" onClick={() => onReplayIndexChange(replayGame.moves?.length ?? 0)}>»</button>
           </div>
         </div>
-        <ChessBoard squares={replaySquares} orientation={orientation} />
       </section>
 
       <aside className="moves-panel">
         <p className="eyebrow">Scoresheet</p>
         <h2>Moves</h2>
-        <MoveTable rows={replayMoveRows} emptyText="No moves recorded." />
+        <MoveTable rows={replayMoveRows} emptyText="No moves recorded." activeMoveIndex={replayIndex} />
       </aside>
     </section>
   )

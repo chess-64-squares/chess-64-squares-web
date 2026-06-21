@@ -38,9 +38,9 @@ export function formatClock(value?: number) {
 }
 
 export function formatElo(elo?: number, change?: number) {
-  if (elo === undefined) return '-'
+  if (elo === undefined) return ''
   if (!change) return String(elo)
-  return `${elo} ${change > 0 ? '+' : ''}${change}`
+  return `(${elo}) (${change > 0 ? '+' : ''}${change})`
 }
 
 export function getEloChange(game: Game, color: 'white' | 'black') {
