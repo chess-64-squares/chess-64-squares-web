@@ -5,4 +5,8 @@ export const userService = {
   getProfile(token?: string | null): Promise<UserResDto> {
     return requestData<UserResDto>('/user/profile', 'GET', undefined, token)
   },
+
+  getProfileByUsername(username: string, token?: string | null): Promise<UserResDto> {
+    return requestData<UserResDto>(`/user/profile/${encodeURIComponent(username)}`, 'GET', undefined, token)
+  },
 }

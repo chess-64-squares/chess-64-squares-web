@@ -57,9 +57,11 @@ export function ProfilePage({
           ))}
         </div>
         <div className="pagination">
-          <button className="button tertiary small" disabled={gamesPage.page <= 1} onClick={() => onLoadGames(gamesPage.page - 1, historyLimit)}>Previous</button>
+          <button className="icon-button" title="First page" disabled={gamesPage.page <= 1} onClick={() => onLoadGames(1, historyLimit)}>«</button>
+          <button className="icon-button" title="Previous page" disabled={gamesPage.page <= 1} onClick={() => onLoadGames(gamesPage.page - 1, historyLimit)}>‹</button>
           <span>Page {gamesPage.page} of {gamesPage.totalPages}</span>
-          <button className="button tertiary small" disabled={gamesPage.page >= gamesPage.totalPages} onClick={() => onLoadGames(gamesPage.page + 1, historyLimit)}>Next</button>
+          <button className="icon-button" title="Next page" disabled={gamesPage.page >= gamesPage.totalPages} onClick={() => onLoadGames(gamesPage.page + 1, historyLimit)}>›</button>
+          <button className="icon-button" title="Last page" disabled={gamesPage.page >= gamesPage.totalPages} onClick={() => onLoadGames(gamesPage.totalPages, historyLimit)}>»</button>
         </div>
       </section>
     </section>
@@ -71,8 +73,8 @@ function GameRow({ game, onOpenReplay }: { game: Game; onOpenReplay: (gameId: nu
     <article className="game-row">
       <div>
         <strong>#{game.gameId}</strong>
-        <span>White: {game.playerWhite.username} ({formatElo(game.playerWhiteElo ?? game.playerWhite.elo, getEloChange(game, 'white'))})</span>
-        <span>Black: {game.playerBlack.username} ({formatElo(game.playerBlackElo ?? game.playerBlack.elo, getEloChange(game, 'black'))})</span>
+        <span className="player-color-line"><ColorSwatch color="white" /> {game.playerWhite.username} ({formatElo(game.playerWhiteElo ?? game.playerWhite.elo, getEloChange(game, 'white'))})</span>
+        <span className="player-color-line"><ColorSwatch color="black" /> {game.playerBlack.username} ({formatElo(game.playerBlackElo ?? game.playerBlack.elo, getEloChange(game, 'black'))})</span>
       </div>
       <span>{statusLabel(game.status)}</span>
       <span>{reasonLabel(game.reasonForEnding)}</span>
@@ -80,4 +82,8 @@ function GameRow({ game, onOpenReplay }: { game: Game; onOpenReplay: (gameId: nu
       <button className="button tertiary small" onClick={() => onOpenReplay(game.gameId)}>Detail</button>
     </article>
   )
+}
+
+function ColorSwatch({ color }: { color: 'white' | 'black' }) {
+  return <span className={`color-swatch ${color}`} aria-label={color} />
 }

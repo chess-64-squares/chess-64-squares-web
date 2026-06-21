@@ -5,6 +5,7 @@ import { io, Socket } from 'socket.io-client'
 import './App.css'
 import { AppDialog } from './component/AppDialog'
 import { MainLayout } from './component/layout/MainLayout'
+import { PromotionDialog, type PromotionPiece } from './component/PromotionDialog'
 import { SOCKET_URL, TOKEN_STORAGE_KEY } from './connect/connect'
 import { authService } from './service/authService'
 import { gameService } from './service/gameService'
@@ -54,6 +55,7 @@ function App() {
   const initialVerifyToken = location.pathname === '/verify-email' ? new URLSearchParams(location.search).get('token') : null
   const [token, setToken] = useState(getStoredToken)
   const [user, setUser] = useState<User | null>(null)
+  const [profileUser, setProfileUser] = useState<User | null>(null)
   const [toast, setToast] = useState<{ type: ToastType; message: string } | null>(null)
   const [authBusy, setAuthBusy] = useState(false)
   const [verifyState, setVerifyState] = useState<'pending' | 'success' | 'error'>(location.pathname === '/verify-email' && !initialVerifyToken ? 'error' : 'pending')
@@ -72,6 +74,7 @@ function App() {
   const [selectedSquare, setSelectedSquare] = useState<string | null>(null)
   const [confirmAction, setConfirmAction] = useState<'draw' | 'resign' | 'abort' | null>(null)
   const [resultGame, setResultGame] = useState<Game | null>(null)
+  const [pendingPromotion, setPendingPromotion] = useState<{ from: string; to: string; color: Color } | null>(null)
   const [clockTick, setClockTick] = useState(0)
 
   const [gamesPage, setGamesPage] = useState<PaginatedGames>({ items: [], total: 0, page: 1, limit: 10, totalPages: 1 })
@@ -141,13 +144,17 @@ function App() {
     })
   }, [refreshProfile, showToast, token])
 
+  const profileUsername = getProfileUsername(location.pathname)
+
   const loadGames = useCallback(
-    async (pageNumber = gamesPage.page, limit = historyLimit) => {
-      if (!user) return
-      const data = await gameService.getByUser(user.userId, pageNumber, limit, token)
+    async (pageNumber = 1, limit = historyLimit) => {
+      if (!user && !profileUsername) return
+      const data = profileUsername
+        ? await gameService.getByUsername(profileUsername, pageNumber, limit, token)
+        : await gameService.getByUser(user!.userId, pageNumber, limit, token)
       setGamesPage(data)
     },
-    [gamesPage.page, historyLimit, token, user],
+    [historyLimit, profileUsername, token, user],
   )
 
   const restoreActiveGame = useCallback(async () => {
@@ -179,9 +186,17 @@ function App() {
 
   useEffect(() => {
     if (token && location.pathname.startsWith('/profile') && user) {
+      if (profileUsername) {
+        setProfileUser(null)
+        userService.getProfileByUsername(profileUsername, token)
+          .then(setProfileUser)
+          .catch((error) => showToast('error', error instanceof Error ? error.message : 'Could not load profile.'))
+      } else {
+        setProfileUser(user)
+      }
       loadGames(1, historyLimit).catch((error) => showToast('error', error.message))
     }
-  }, [historyLimit, loadGames, location.pathname, showToast, token, user])
+  }, [historyLimit, loadGames, location.pathname, profileUsername, showToast, token, user])
 
   useEffect(() => {
     if (!token || !user) return
@@ -440,12 +455,7 @@ function App() {
     dragSourceRef.current = null
     if (!activeGame || !canMove || !from || from === target.name) return
 
-    socketRef.current?.emit('makeMove', {
-      gameId: activeGame.gameId,
-      from,
-      to: target.name,
-      promotion: 'q',
-    })
+    submitMove(from, target.name)
   }
 
   function handleSquareClick(square: Square) {
@@ -468,12 +478,29 @@ function App() {
       return
     }
 
+    submitMove(selectedSquare, square.name)
+  }
+
+  function submitMove(from: string, to: string, promotion?: PromotionPiece) {
+    if (!activeGame) return
+    const piece = parseFen(activeGame.fen).find((square) => square.name === from)?.piece
+    if (!promotion && piece?.toLowerCase() === 'p' && isPromotionTarget(piece, to)) {
+      setPendingPromotion({ from, to, color: piece === piece.toUpperCase() ? 'white' : 'black' })
+      return
+    }
+
     socketRef.current?.emit('makeMove', {
       gameId: activeGame.gameId,
-      from: selectedSquare,
-      to: square.name,
-      promotion: 'q',
+      from,
+      to,
+      promotion,
     })
+  }
+
+  function selectPromotion(piece: PromotionPiece) {
+    if (!pendingPromotion) return
+    submitMove(pendingPromotion.from, pendingPromotion.to, piece)
+    setPendingPromotion(null)
   }
 
   async function openReplay(gameId: number) {
@@ -492,14 +519,10 @@ function App() {
       {toast && <div className={`toast ${toast.type}`}>{toast.message}</div>}
 
       {pendingOffer && (
-        <div className="offer-toast">
-          <strong>{pendingOffer.type === 'draw' ? 'Draw request' : 'Resignation request'}</strong>
-          <span>Your opponent is waiting for your response.</span>
-          <div>
-            <button className="button primary small" onClick={() => respondOffer(true)}>Accept</button>
-            <button className="button tertiary small" onClick={() => respondOffer(false)}>Decline</button>
-          </div>
-        </div>
+        <AppDialog title={pendingOffer.type === 'draw' ? 'Draw offer' : 'Resignation request'} message="Your opponent is waiting for your response.">
+          <button className="button tertiary" onClick={() => respondOffer(false)}>Decline</button>
+          <button className="button primary" onClick={() => respondOffer(true)}>Accept</button>
+        </AppDialog>
       )}
 
       {confirmAction && (
@@ -511,28 +534,19 @@ function App() {
         </AppDialog>
       )}
 
+      {pendingPromotion && (
+        <PromotionDialog color={pendingPromotion.color} onSelect={selectPromotion} onCancel={() => setPendingPromotion(null)} />
+      )}
+
       {resultGame && (
         <AppDialog title={resultTitle(resultGame, user)} message={`${statusLabel(resultGame.status)} · ${reasonLabel(resultGame.reasonForEnding)}`}>
           <button className="button tertiary" onClick={() => setResultGame(null)}>Confirm</button>
-          <button className="button tertiary" onClick={() => {
-            setResultGame(null)
-            setActiveGame(null)
-            setMoveLog([])
-            setMoveCount(0)
-            setMatchState('idle')
-            findMatch()
-          }}>Request rematch</button>
-          <button className="button tertiary" onClick={() => navigate('/profile')}>View history</button>
-          <button className="button primary" onClick={() => {
-            setResultGame(null)
-            setActiveGame(null)
-            setMoveLog([])
-            setMoveCount(0)
-            setMatchState('idle')
-            navigate('/play')
-          }}>
-            Find another match
-          </button>
+          <button className="button primary"
+            onClick={() => {
+              setResultGame(null)
+              navigate(`history/${resultGame.gameId}`)
+            }}
+          >View history</button>
         </AppDialog>
       )}
 
@@ -570,7 +584,7 @@ function App() {
           ) : <Navigate to="/login" replace />} />
           <Route path="/profile" element={token ? (
             <ProfilePage
-              user={user}
+              user={profileUser ?? user}
               gamesPage={gamesPage}
               historyLimit={historyLimit}
               onChangeLimit={(nextLimit) => {
@@ -583,7 +597,7 @@ function App() {
           ) : <Navigate to="/login" replace />} />
           <Route path="/profile/:username" element={token ? (
             <ProfilePage
-              user={user}
+              user={profileUser}
               gamesPage={gamesPage}
               historyLimit={historyLimit}
               onChangeLimit={(nextLimit) => {
@@ -637,6 +651,15 @@ function getDisplayTime(game: Game | null, color: Color, turn: Color, matchState
 function isMyPiece(piece: string, color: Color | null) {
   if (!color) return false
   return color === 'white' ? piece === piece.toUpperCase() : piece === piece.toLowerCase()
+}
+
+function isPromotionTarget(piece: string, to: string) {
+  return (piece === 'P' && to.endsWith('8')) || (piece === 'p' && to.endsWith('1'))
+}
+
+function getProfileUsername(pathname: string) {
+  const match = pathname.match(/^\/profile\/([^/]+)$/)
+  return match ? decodeURIComponent(match[1]) : null
 }
 
 function buildMoveRows(moves: string[]) {

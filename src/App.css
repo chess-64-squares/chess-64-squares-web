@@ -223,6 +223,35 @@
   flex-wrap: wrap;
 }
 
+.promotion-options {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(64px, 1fr));
+  gap: 10px;
+  width: 100%;
+}
+
+.promotion-option {
+  display: grid;
+  place-items: center;
+  gap: 6px;
+  border: 1px solid var(--mute);
+  border-radius: 8px;
+  background: var(--canvas-soft);
+  color: var(--ink);
+  padding: 10px;
+  cursor: pointer;
+}
+
+.promotion-option:hover {
+  border-color: var(--primary);
+}
+
+.promotion-option img {
+  width: 52px;
+  height: 52px;
+  object-fit: contain;
+}
+
 .auth-page {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(320px, 440px);
@@ -383,6 +412,29 @@
 .game-row div {
   display: grid;
   gap: 2px;
+}
+
+.player-color-line {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.color-swatch {
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+  border: 1px solid var(--ink);
+  border-radius: 3px;
+  flex: 0 0 auto;
+}
+
+.color-swatch.white {
+  background: var(--canvas);
+}
+
+.color-swatch.black {
+  background: var(--ink);
 }
 
 .empty {
@@ -632,6 +684,11 @@
   font-weight: 800;
   line-height: 1;
   cursor: pointer;
+}
+
+.icon-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
 }
 
 @keyframes spin {

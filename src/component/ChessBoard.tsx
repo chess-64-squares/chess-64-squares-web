@@ -1,7 +1,7 @@
 import type { CSSProperties, DragEvent } from 'react'
 import type { Color, Square } from '../types'
 
-const pieceImages: Record<string, string> = {
+export const pieceImages: Record<string, string> = {
   p: new URL('../assets/chess/chessman/default/bp.png', import.meta.url).href,
   r: new URL('../assets/chess/chessman/default/br.png', import.meta.url).href,
   n: new URL('../assets/chess/chessman/default/bn.png', import.meta.url).href,

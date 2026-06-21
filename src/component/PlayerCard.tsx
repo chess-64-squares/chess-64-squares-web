@@ -20,7 +20,7 @@ export function PlayerCard({
       <div>
         <strong>{player?.username || label} {snapshotElo && `(${formatElo(snapshotElo ?? player?.elo, eloChange)})`}</strong>
       </div>
-      <time className={active ? 'time active' : 'time'}>{time ?? '--:--'}</time>
+       {time && <time className={active ? 'time active' : 'time'}>{time}</time>}
     </article>
   )
 }
