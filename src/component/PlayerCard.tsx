@@ -1,20 +1,28 @@
 import type { User } from '../types'
 
 export function PlayerCard({
+  label,
   player,
+  snapshotElo,
+  eloChange,
   time,
   active,
 }: {
+  label: string
   player?: User
+  snapshotElo?: number
+  eloChange?: number
   time?: string
   active: boolean
 }) {
   return (
-    <article className={'player-card'}>
+    <article className={active ? 'player-card active' : 'player-card'}>
       <div>
-        <strong>{player?.username || 'Opponent'} {player ? `(${formatElo(player.elo)})` : ''}</strong>
+        <span>{label}</span>
+        <strong>{player?.username ?? '-'}</strong>
+        <small>Elo {formatElo(snapshotElo ?? player?.elo, eloChange)}</small>
       </div>
-      {time && <time className={active ? 'time active' : 'time'}>{time}</time>}
+      <time className={active ? 'time active' : 'time'}>{time ?? '--:--'}</time>
     </article>
   )
 }

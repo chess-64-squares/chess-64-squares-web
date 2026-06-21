@@ -1,3 +1,4 @@
+import { useEffect } from 'react'
 import { ChessBoard } from '../component/ChessBoard'
 import { MoveTable } from '../component/MoveTable'
 import { PlayerCard } from '../component/PlayerCard'
@@ -20,6 +21,21 @@ export function HistoryPage({
   user: User | null
   onReplayIndexChange: (index: number | ((current: number) => number)) => void
 }) {
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (!replayGame) return
+      if (event.key === 'ArrowLeft') {
+        onReplayIndexChange((index) => Math.max(0, index - 1))
+      }
+      if (event.key === 'ArrowRight') {
+        onReplayIndexChange((index) => Math.min(replayGame.moves?.length ?? 0, index + 1))
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [onReplayIndexChange, replayGame])
+
   if (!replayGame) {
     return <div className="empty">Loading game history...</div>
   }

@@ -1,6 +1,12 @@
 import { ApiResponse } from "../dto/response/api-response";
 export const TOKEN_STORAGE_KEY = "chess64.token";
-const server_url = (import.meta.env.VITE_SERVER_URL || import.meta.env.VITE_API_BASE_URL || "http://localhost:8000/api/v1") as string;
+export const API_BASE_URL = (import.meta.env.VITE_SERVER_URL || import.meta.env.VITE_API_BASE_URL || "http://26.89.53.22:8000/api/v1") as string;
+export const SOCKET_URL = buildSocketUrl((import.meta.env.VITE_SOCKET_URL || API_BASE_URL) as string);
+
+function buildSocketUrl(value: string) {
+    const withoutApiPrefix = value.replace(/\/api\/v\d+\/?$/i, "");
+    return withoutApiPrefix.endsWith("/game") ? withoutApiPrefix : `${withoutApiPrefix.replace(/\/$/, "")}/game`;
+}
 
 export class Connect {
     static async request<T>(
@@ -11,7 +17,7 @@ export class Connect {
     ): Promise<ApiResponse<T>> {
         try {
             const accessToken = token ?? localStorage.getItem(TOKEN_STORAGE_KEY);
-            const response = await fetch(`${server_url}${endpoint}`, {
+            const response = await fetch(`${API_BASE_URL}${endpoint}`, {
                 method,
                 headers: {
                     "Content-Type": "application/json",

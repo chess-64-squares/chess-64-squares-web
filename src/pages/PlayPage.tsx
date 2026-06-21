@@ -3,7 +3,7 @@ import { ChessBoard } from '../component/ChessBoard'
 import { MoveTable } from '../component/MoveTable'
 import { PlayerCard } from '../component/PlayerCard'
 import type { Color, Game, GameMode, MatchState, Square, User } from '../types'
-import { formatClock, statusLabel } from '../utils/uiFormat'
+import { formatClock } from '../utils/uiFormat'
 
 export function PlayPage({
   activeGame,
@@ -13,7 +13,6 @@ export function PlayPage({
   moveRows,
   myColor,
   turn,
-  canMove,
   activeBoardSquares,
   selectedSquare,
   displayWhiteTimeMs,
@@ -76,9 +75,9 @@ export function PlayPage({
       </aside>
 
       <section className="board-area">
-        <PlayerCard player={getOpponentPlayer(activeGame, user)} time={formatClock(getOpponentTime(activeGame, user, displayWhiteTimeMs, displayBlackTimeMs))} active={activeGame ? turn !== myColor : false} />
+        <PlayerCard label="Opponent" player={getOpponentPlayer(activeGame, user)} snapshotElo={getOpponentElo(activeGame, user)} eloChange={getOpponentEloChange(activeGame, user)} time={formatClock(getOpponentTime(activeGame, user, displayWhiteTimeMs, displayBlackTimeMs))} active={activeGame ? turn !== myColor : false} />
         <ChessBoard squares={activeBoardSquares} orientation={myColor ?? 'white'} selectedSquare={selectedSquare} onDragStart={onDragStart} onDrop={onDrop} onSquareClick={onSquareClick} />
-        <PlayerCard player={getSelfPlayer(activeGame, user)} time={formatClock(getSelfTime(activeGame, user, displayWhiteTimeMs, displayBlackTimeMs))} active={activeGame ? turn === myColor : false} />
+        <PlayerCard label="You" player={getSelfPlayer(activeGame, user)} snapshotElo={getSelfElo(activeGame, user)} eloChange={getSelfEloChange(activeGame, user)} time={formatClock(getSelfTime(activeGame, user, displayWhiteTimeMs, displayBlackTimeMs))} active={activeGame ? turn === myColor : false} />
       </section>
 
       <aside className="moves-panel">
@@ -160,8 +159,4 @@ function getOpponentTime(game: Game | null, user: User | null, whiteTime: number
   const color = getPlayerColor(game, user)
   if (!game || !color) return undefined
   return color === 'white' ? blackTime : whiteTime
-}
-
-function capitalize(value: string) {
-  return value.charAt(0).toUpperCase() + value.slice(1)
 }

@@ -13,4 +13,8 @@ export const gameService = {
   getDetail(gameId: number, token?: string | null): Promise<Game> {
     return requestData<Game>(`/game/${gameId}`, 'GET', undefined, token)
   },
+
+  getMyActiveGame(token?: string | null): Promise<Game | null> {
+    return requestData<Game | null>('/game/active/me', 'GET', undefined, token)
+  },
 }

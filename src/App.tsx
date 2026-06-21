@@ -5,7 +5,7 @@ import { io, Socket } from 'socket.io-client'
 import './App.css'
 import { AppDialog } from './component/AppDialog'
 import { MainLayout } from './component/layout/MainLayout'
-import { TOKEN_STORAGE_KEY } from './connect/connect'
+import { SOCKET_URL, TOKEN_STORAGE_KEY } from './connect/connect'
 import { authService } from './service/authService'
 import { gameService } from './service/gameService'
 import { userService } from './service/userService'
@@ -18,7 +18,6 @@ import { HistoryPage } from './pages/HistoryPage'
 import type { Color, Game, GameMode, MatchState, PaginatedGames, PendingOffer, Square, ToastType, User } from './types'
 import { reasonLabel, resultTitle, statusLabel } from './utils/uiFormat'
 
-const SOCKET_BASE = import.meta.env.VITE_SOCKET_URL ?? 'http://localhost:8000/game'
 const START_FEN = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1'
 
 function getStoredToken() {
@@ -62,6 +61,7 @@ function App() {
 
   const socketRef = useRef<Socket | null>(null)
   const dragSourceRef = useRef<string | null>(null)
+  const activeGameRef = useRef<Game | null>(null)
   const [matchState, setMatchState] = useState<MatchState>('idle')
   const [gameModes, setGameModes] = useState<GameMode[]>([])
   const [selectedMode, setSelectedMode] = useState<number | null>(null)
@@ -82,6 +82,10 @@ function App() {
   const showToast = useCallback((type: ToastType, message: string) => {
     setToast({ type, message })
   }, [])
+
+  useEffect(() => {
+    activeGameRef.current = activeGame
+  }, [activeGame])
 
   useEffect(() => {
     if (!toast) return
@@ -146,6 +150,21 @@ function App() {
     [gamesPage.page, historyLimit, token, user],
   )
 
+  const restoreActiveGame = useCallback(async () => {
+    if (!token || activeGame?.status === 'IN_PROGRESS') return
+    const active = await gameService.getMyActiveGame(token)
+    if (!active) return
+
+    const detail = await gameService.getDetail(active.gameId, token).catch(() => active)
+    setActiveGame(detail)
+    setMoveLog(detail.moves?.map((move) => move.san) ?? [])
+    setMoveCount(detail.moves?.length ?? 0)
+    setSelectedSquare(null)
+    setResultGame(null)
+    setMatchState('playing')
+    socketRef.current?.emit('joinGame', { gameId: detail.gameId })
+  }, [activeGame?.status, token])
+
   useEffect(() => {
     if (!token || !location.pathname.startsWith('/history/')) return
     const gameId = Number(location.pathname.split('/').at(-1))
@@ -165,18 +184,29 @@ function App() {
   }, [historyLimit, loadGames, location.pathname, showToast, token, user])
 
   useEffect(() => {
+    if (!token || !user) return
+    restoreActiveGame().catch((error) => showToast('error', error instanceof Error ? error.message : 'Could not restore active game.'))
+  }, [restoreActiveGame, showToast, token, user])
+
+  useEffect(() => {
     if (!token) {
       socketRef.current?.disconnect()
       socketRef.current = null
       return
     }
 
-    const nextSocket = io(SOCKET_BASE, {
+    const nextSocket = io(SOCKET_URL, {
       auth: { token },
-      transports: ['websocket', 'polling'],
+      transports: ['polling', 'websocket'],
+      upgrade: true,
     })
 
-    nextSocket.on('connect', () => showToast('success', 'Connected to the game server.'))
+    nextSocket.on('connect', () => {
+      showToast('success', 'Connected to the game server.')
+      if (activeGameRef.current?.status === 'IN_PROGRESS') {
+        nextSocket.emit('joinGame', { gameId: activeGameRef.current.gameId })
+      }
+    })
     nextSocket.on('connect_error', (error) => {
       setMatchState('idle')
       showToast('error', error.message)
