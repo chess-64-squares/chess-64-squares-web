@@ -469,6 +469,7 @@
 .player-card div {
   display: grid;
   gap: 3px;
+  font-weight: 400;
 }
 
 .player-card time {
@@ -477,7 +478,7 @@
   color: var(--canvas);
   padding: 8px 10px;
   font-size: 18px;
-  font-weight: 800;
+  font-weight: 600;
   line-height: 1;
   min-width: 72px;
   text-align: center;

@@ -18,9 +18,7 @@ export function PlayerCard({
   return (
     <article className={active ? 'player-card active' : 'player-card'}>
       <div>
-        <span>{label}</span>
-        <strong>{player?.username ?? '-'}</strong>
-        <small>Elo {formatElo(snapshotElo ?? player?.elo, eloChange)}</small>
+        <strong>{player?.username || label} {snapshotElo && `(${formatElo(snapshotElo ?? player?.elo, eloChange)})`}</strong>
       </div>
       <time className={active ? 'time active' : 'time'}>{time ?? '--:--'}</time>
     </article>
