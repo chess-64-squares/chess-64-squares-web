@@ -6,7 +6,7 @@ Thực hiện các yêu cầu sau:
     - Giao diện hiện tại bị lệch. Trang "play" chia thành 3 phần từ trái qua phải lần lượt là: 
         + Phần 1: From tìm trận.
         + Phần 2: Thông tin 2 player và bàn cờ.
-        + Phần 3: Biên bản nước đi.
+        + Phần 3: Biên bản nước đi (nếu dài hơn màng hình thì dùng thanh cuộn dọc).
     - Các file HistoryPage.tsx, PlayPage.tsx, ProfilePage.tsx, LoginPage.tsx, RegisterPage.tsx, VerifyPage.tsx trong "src/pages" phải được tổ chức lại toàn bộ các thành phần phải của page nào phải nằm trong page đó. KHÔNG ĐƯỢC để mỗi file chỉ có 1 dòng return <>{children}</>. Điều này thật vô lý. Hãy làm lại cho hợp lý.
 
     
