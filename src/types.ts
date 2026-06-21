@@ -2,7 +2,6 @@ import type { GameStatus } from './enum/game-status.enum'
 import type { ReasonForEnding } from './enum/reason-for-ending.enum'
 import type { UserStatus } from './enum/user-status.enum'
 
-export type Page = 'login' | 'register' | 'profile' | 'play' | 'verify-email' | 'replay'
 export type ToastType = 'success' | 'error' | 'warning' | 'info'
 export type MatchState = 'idle' | 'connecting' | 'waiting' | 'playing' | 'ended'
 export type Color = 'white' | 'black'
@@ -38,8 +37,6 @@ export type Game = {
   gameMode?: GameMode
   playerWhiteElo?: number
   playerBlackElo?: number
-  playerWhiteEloChange?: number
-  playerBlackEloChange?: number
   playerWhiteTimeMs?: number
   playerBlackTimeMs?: number
   lastMoveAt?: string | Date | null

@@ -8,6 +8,9 @@ Thực hiện các yêu cầu sau:
         + Phần 2: Thông tin 2 player và bàn cờ.
         + Phần 3: Biên bản nước đi (nếu dài hơn màng hình thì dùng thanh cuộn dọc).
     - Các file HistoryPage.tsx, PlayPage.tsx, ProfilePage.tsx, LoginPage.tsx, RegisterPage.tsx, VerifyPage.tsx trong "src/pages" phải được tổ chức lại toàn bộ các thành phần phải của page nào phải nằm trong page đó. KHÔNG ĐƯỢC để mỗi file chỉ có 1 dòng return <>{children}</>. Điều này thật vô lý. Hãy làm lại cho hợp lý.
+    - Sử dụng import { Routes, Route, Navigate } from "react-router-dom"; để điều hướng
+    - Các thành phần sử dụng chung như thanh điều hướng thì tách ra thành file riêng để tái sử dụng "component/layout/MainLayout.tsx"
+    - Thanh điều hướng để trái, dọc theo màng hình bên trái
 
     
 * Chỉnh sửa các chức năng sau:  

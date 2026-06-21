@@ -1,11 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { DragEvent, FormEvent } from 'react'
+import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
 import { io, Socket } from 'socket.io-client'
 import './App.css'
 import { AppDialog } from './component/AppDialog'
-import { ChessBoard } from './component/ChessBoard'
-import { MoveTable } from './component/MoveTable'
-import { PlayerCard } from './component/PlayerCard'
+import { MainLayout } from './component/layout/MainLayout'
 import { TOKEN_STORAGE_KEY } from './connect/connect'
 import { authService } from './service/authService'
 import { gameService } from './service/gameService'
@@ -16,27 +15,11 @@ import { VerifyEmailPage } from './pages/VerifyEmailPage'
 import { ProfilePage } from './pages/ProfilePage'
 import { PlayPage } from './pages/PlayPage'
 import { HistoryPage } from './pages/HistoryPage'
-import type { Color, Game, GameMode, MatchState, Page, PaginatedGames, PendingOffer, Square, ToastType, User } from './types'
+import type { Color, Game, GameMode, MatchState, PaginatedGames, PendingOffer, Square, ToastType, User } from './types'
+import { reasonLabel, resultTitle, statusLabel } from './utils/uiFormat'
 
 const SOCKET_BASE = import.meta.env.VITE_SOCKET_URL ?? 'http://localhost:8000/game'
 const START_FEN = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1'
-
-function getPageFromPath(): Page {
-  const path = window.location.pathname
-  if (path === '/register') return 'register'
-  if (path === '/profile' || path.startsWith('/profile/')) return 'profile'
-  if (path.startsWith('/history/')) return 'replay'
-  if (path === '/verify-email') return 'verify-email'
-  if (path === '/play') return 'play'
-  return getStoredToken() ? 'play' : 'login'
-}
-
-function getPathForPage(page: Page, detailId?: number) {
-  if (page === 'replay') return `/history/${detailId ?? ''}`
-  if (page === 'profile') return '/profile'
-  if (page === 'play') return '/play'
-  return `/${page}`
-}
 
 function getStoredToken() {
   return localStorage.getItem(TOKEN_STORAGE_KEY) ?? ''
@@ -66,34 +49,16 @@ function parseFen(fen: string): Square[] {
   return squares
 }
 
-function statusLabel(status: string) {
-  const labels: Record<string, string> = {
-    WAITING_FOR_OPPONENT: 'Waiting',
-    IN_PROGRESS: 'In progress',
-    WHITE_WINS: 'White wins',
-    BLACK_WINS: 'Black wins',
-    DRAW: 'Draw',
-    ABORTED: 'Aborted',
-    FINISHED: 'Finished',
-  }
-  return labels[status] ?? status
-}
-
-function reasonLabel(reason?: string | null) {
-  if (!reason) return '-'
-  return reason.replaceAll('_', ' ').toLowerCase().replace(/^\w|\s\w/g, (match) => match.toUpperCase())
-}
-
 function App() {
-  const initialPage = getPageFromPath()
-  const initialVerifyToken = initialPage === 'verify-email' ? new URLSearchParams(window.location.search).get('token') : null
-  const [page, setPage] = useState<Page>(initialPage)
+  const location = useLocation()
+  const navigate = useNavigate()
+  const initialVerifyToken = location.pathname === '/verify-email' ? new URLSearchParams(location.search).get('token') : null
   const [token, setToken] = useState(getStoredToken)
   const [user, setUser] = useState<User | null>(null)
   const [toast, setToast] = useState<{ type: ToastType; message: string } | null>(null)
   const [authBusy, setAuthBusy] = useState(false)
-  const [verifyState, setVerifyState] = useState<'pending' | 'success' | 'error'>(initialPage === 'verify-email' && !initialVerifyToken ? 'error' : 'pending')
-  const [verifyMessage, setVerifyMessage] = useState(initialPage === 'verify-email' && !initialVerifyToken ? 'Verification token is missing.' : 'Verifying your email...')
+  const [verifyState, setVerifyState] = useState<'pending' | 'success' | 'error'>(location.pathname === '/verify-email' && !initialVerifyToken ? 'error' : 'pending')
+  const [verifyMessage, setVerifyMessage] = useState(location.pathname === '/verify-email' && !initialVerifyToken ? 'Verification token is missing.' : 'Verifying your email...')
 
   const socketRef = useRef<Socket | null>(null)
   const dragSourceRef = useRef<string | null>(null)
@@ -118,20 +83,6 @@ function App() {
     setToast({ type, message })
   }, [])
 
-  const navigate = useCallback((nextPage: Page, detailId?: number) => {
-    const nextPath = getPathForPage(nextPage, detailId)
-    if (window.location.pathname !== nextPath) {
-      window.history.pushState({}, '', nextPath)
-    }
-    setPage(nextPage)
-  }, [])
-
-  useEffect(() => {
-    const syncRoute = () => setPage(getPageFromPath())
-    window.addEventListener('popstate', syncRoute)
-    return () => window.removeEventListener('popstate', syncRoute)
-  }, [])
-
   useEffect(() => {
     if (!toast) return
     const timeout = window.setTimeout(() => setToast(null), 4200)
@@ -145,8 +96,8 @@ function App() {
   }, [matchState])
 
   useEffect(() => {
-    if (page !== 'verify-email') return
-    const params = new URLSearchParams(window.location.search)
+    if (location.pathname !== '/verify-email') return
+    const params = new URLSearchParams(location.search)
     const verifyToken = params.get('token')
 
     if (!verifyToken) {
@@ -162,7 +113,7 @@ function App() {
         setVerifyState('error')
         setVerifyMessage(error instanceof Error ? error.message : 'Email verification failed.')
       })
-  }, [page])
+  }, [location.pathname, location.search])
 
   const refreshProfile = useCallback(() => {
     if (!token) return Promise.resolve()
@@ -196,8 +147,8 @@ function App() {
   )
 
   useEffect(() => {
-    if (!token || page !== 'replay') return
-    const gameId = Number(window.location.pathname.split('/').at(-1))
+    if (!token || !location.pathname.startsWith('/history/')) return
+    const gameId = Number(location.pathname.split('/').at(-1))
     if (!Number.isInteger(gameId) || gameId <= 0 || replayGame?.gameId === gameId) return
     gameService.getDetail(gameId, token)
       .then((game) => {
@@ -205,13 +156,13 @@ function App() {
         setReplayIndex(0)
       })
       .catch((error) => showToast('error', error instanceof Error ? error.message : 'Could not load game detail.'))
-  }, [page, replayGame?.gameId, showToast, token])
+  }, [location.pathname, replayGame?.gameId, showToast, token])
 
   useEffect(() => {
-    if (token && page === 'profile' && user) {
+    if (token && location.pathname.startsWith('/profile') && user) {
       loadGames(1, historyLimit).catch((error) => showToast('error', error.message))
     }
-  }, [historyLimit, loadGames, page, showToast, token, user])
+  }, [historyLimit, loadGames, location.pathname, showToast, token, user])
 
   useEffect(() => {
     if (!token) {
@@ -241,7 +192,7 @@ function App() {
       setMoveCount(0)
       setSelectedSquare(null)
       setMatchState('playing')
-      navigate('play')
+      navigate('/play')
       showToast('success', 'Opponent found.')
     })
     nextSocket.on('gameState', (game: Game) => {
@@ -340,7 +291,7 @@ function App() {
     setActiveGame(null)
     setResultGame(null)
     setMatchState('idle')
-    navigate('login')
+    navigate('/login')
   }
 
   async function handleLogin(event: FormEvent<HTMLFormElement>) {
@@ -358,7 +309,7 @@ function App() {
       }
       localStorage.setItem(TOKEN_STORAGE_KEY, response.data.token)
       setToken(response.data.token)
-      navigate('play')
+      navigate('/play')
       showToast('success', 'Signed in successfully.')
     } catch (error) {
       showToast('error', error instanceof Error ? error.message : 'Sign in failed.')
@@ -379,7 +330,7 @@ function App() {
         password: String(form.get('password') ?? ''),
       })
       showToast('success', 'Account created. Check your email to verify it.')
-      navigate('login')
+      navigate('/login')
     } catch (error) {
       showToast('error', error instanceof Error ? error.message : 'Registration failed.')
     } finally {
@@ -500,51 +451,14 @@ function App() {
       const game = await gameService.getDetail(gameId, token)
       setReplayGame(game)
       setReplayIndex(0)
-      navigate('replay', game.gameId)
+      navigate(`/history/${game.gameId}`)
     } catch (error) {
       showToast('error', error instanceof Error ? error.message : 'Could not load game detail.')
     }
   }
 
   return (
-    <main className="app-shell">
-      <nav className="topbar">
-        <button className="brand" onClick={() => navigate(token ? 'play' : 'login')} type="button">
-          <span className="brand-mark">64</span>
-          <span>Chess 64 Squares</span>
-        </button>
-        <div className="nav-actions">
-          {token ? (
-            <>
-              <button className={page === 'play' ? 'nav-link active' : 'nav-link'} onClick={() => navigate('play')}>
-                Play
-              </button>
-              <button
-                className={page === 'profile' ? 'nav-link active' : 'nav-link'}
-                onClick={() => {
-                  navigate('profile')
-                  loadGames(1, historyLimit).catch((error) => showToast('error', error.message))
-                }}
-              >
-                Profile
-              </button>
-              <button className="button tertiary small" onClick={logout}>
-                Sign out
-              </button>
-            </>
-          ) : (
-            <>
-              <button className={page === 'login' ? 'nav-link active' : 'nav-link'} onClick={() => navigate('login')}>
-                Sign in
-              </button>
-              <button className="button primary small" onClick={() => navigate('register')}>
-                Register
-              </button>
-            </>
-          )}
-        </div>
-      </nav>
-
+    <>
       {toast && <div className={`toast ${toast.type}`}>{toast.message}</div>}
 
       {pendingOffer && (
@@ -569,194 +483,105 @@ function App() {
 
       {resultGame && (
         <AppDialog title={resultTitle(resultGame, user)} message={`${statusLabel(resultGame.status)} · ${reasonLabel(resultGame.reasonForEnding)}`}>
-          <button className="button tertiary" onClick={() => navigate('profile')}>View history</button>
+          <button className="button tertiary" onClick={() => setResultGame(null)}>Confirm</button>
+          <button className="button tertiary" onClick={() => {
+            setResultGame(null)
+            setActiveGame(null)
+            setMoveLog([])
+            setMoveCount(0)
+            setMatchState('idle')
+            findMatch()
+          }}>Request rematch</button>
+          <button className="button tertiary" onClick={() => navigate('/profile')}>View history</button>
           <button className="button primary" onClick={() => {
             setResultGame(null)
             setActiveGame(null)
             setMoveLog([])
             setMoveCount(0)
             setMatchState('idle')
-            navigate('play')
+            navigate('/play')
           }}>
             Find another match
           </button>
         </AppDialog>
       )}
 
-      {page === 'verify-email' && (
-        <VerifyEmailPage state={verifyState} message={verifyMessage} onGoToLogin={() => navigate('login')} />
-      )}
-
-      {!token && page === 'login' && (
-        <LoginPage authBusy={authBusy} onLogin={handleLogin} />
-      )}
-
-      {!token && page === 'register' && (
-        <RegisterPage authBusy={authBusy} onRegister={handleRegister} />
-      )}
-
-      {token && page === 'profile' && (
-        <ProfilePage>
-          <div className="page-heading">
-            <p className="eyebrow">Profile</p>
-            <h1>{user?.username ?? 'Player'}</h1>
-          </div>
-          <div className="profile-grid">
-            <article className="panel dark">
-              <span className="metric-label">Current Elo</span>
-              <strong className="metric">{user?.elo ?? 800}</strong>
-              <span>{user?.isEmailVerified ? 'Email verified' : 'Email not verified'}</span>
-            </article>
-            <article className="panel">
-              <span className="metric-label">Status</span>
-              <strong>{user?.status ?? 'ACTIVE'}</strong>
-              <span>Joined {formatDate(user?.createdAt)}</span>
-            </article>
-          </div>
-
-          <section className="history-section">
-            <div className="section-title">
-              <h2>Game History</h2>
-              <div className="history-tools">
-                <select
-                  value={historyLimit}
-                  onChange={(event) => {
-                    const nextLimit = Number(event.target.value)
-                    setHistoryLimit(nextLimit)
-                    loadGames(1, nextLimit).catch((error) => showToast('error', error.message))
-                  }}
-                >
-                  {[10, 20, 50, 100].map((value) => <option key={value} value={value}>{value}</option>)}
-                </select>
-                <button className="button tertiary small" onClick={() => loadGames(gamesPage.page, historyLimit).catch((error) => showToast('error', error.message))}>
-                  Reload
-                </button>
-              </div>
-            </div>
-            <div className="game-list">
-              {gamesPage.items.length === 0 && <div className="empty">No games recorded yet.</div>}
-              {gamesPage.items.map((game) => (
-                <article className="game-row" key={game.gameId}>
-                  <div>
-                    <strong>#{game.gameId}</strong>
-                    <span>White: {game.playerWhite.username} ({formatElo(game.playerWhiteElo ?? game.playerWhite.elo, game.playerWhiteEloChange)})</span>
-                    <span>Black: {game.playerBlack.username} ({formatElo(game.playerBlackElo ?? game.playerBlack.elo, game.playerBlackEloChange)})</span>
-                  </div>
-                  <span>{statusLabel(game.status)}</span>
-                  <span>{reasonLabel(game.reasonForEnding)}</span>
-                  <span>{formatDate(game.date)}</span>
-                  <button className="button tertiary small" onClick={() => openReplay(game.gameId)}>Detail</button>
-                </article>
-              ))}
-            </div>
-            <div className="pagination">
-              <button className="button tertiary small" disabled={gamesPage.page <= 1} onClick={() => loadGames(gamesPage.page - 1, historyLimit)}>Previous</button>
-              <span>Page {gamesPage.page} of {gamesPage.totalPages}</span>
-              <button className="button tertiary small" disabled={gamesPage.page >= gamesPage.totalPages} onClick={() => loadGames(gamesPage.page + 1, historyLimit)}>Next</button>
-            </div>
-          </section>
-        </ProfilePage>
-      )}
-
-      {token && page === 'play' && (
-        <PlayPage>
-          <aside className="match-panel">
-            <p className="eyebrow">Matchmaking</p>
-            <h1>Ready for 64 squares</h1>
-            {(!activeGame || matchState === 'ended') && (
-              <div className="mode-list">
-                {gameModes.length === 0 && <span className="empty compact">Loading game modes...</span>}
-                {gameModes.map((mode) => (
-                  <button className={selectedMode === mode.gameModeId ? 'mode-card selected' : 'mode-card'} key={mode.gameModeId} onClick={() => setSelectedMode(mode.gameModeId)} type="button">
-                    <strong>{mode.gameModeName}</strong>
-                    <span>{mode.time}+{mode.plusPerMove}</span>
-                  </button>
-                ))}
-              </div>
-            )}
-            <div className="match-actions">
-              {matchState === 'waiting' || matchState === 'connecting' ? (
-                <button className="button secondary" onClick={cancelFindMatch}>Cancel search</button>
-              ) : (
-                (!activeGame || matchState === 'ended') && <button className="button primary" onClick={findMatch} disabled={!selectedMode}>Find opponent</button>
-              )}
-              {(matchState === 'waiting' || matchState === 'connecting') && <span className="loading-inline"><span /> Searching...</span>}
-            </div>
-          </aside>
-
-          <section className="board-area">
-            <div className="board-header">
-              <div>
-                <span className="badge">{myColor ? `You are ${myColor}` : 'No active game'}</span>
-                <h2>{activeGame ? statusLabel(activeGame.status) : 'Board ready'}</h2>
-              </div>
-              <div className="board-actions">
-                {activeGame && matchState === 'playing' && (
-                  <>
-                    <button className="button tertiary small" onClick={() => requestAction('draw')}>Draw</button>
-                    {moveCount < 3 ? (
-                      <button className="button tertiary small" onClick={abortGame}>Abort</button>
-                    ) : (
-                      <button className="button tertiary small danger" onClick={() => requestAction('resign')}>Resign</button>
-                    )}
-                  </>
-                )}
-                <span className="turn-pill">{canMove ? 'Your turn' : `${capitalize(turn)} to move`}</span>
-              </div>
-            </div>
-
-            <PlayerCard label="Opponent" player={getOpponentPlayer(activeGame, user)} snapshotElo={getOpponentElo(activeGame, user)} time={formatClock(getOpponentTime(activeGame, user, displayWhiteTimeMs, displayBlackTimeMs))} active={activeGame ? turn !== myColor : false} />
-            <ChessBoard squares={activeBoardSquares} orientation={myColor ?? 'white'} selectedSquare={selectedSquare} onDragStart={handleDragStart} onDrop={handleDrop} onSquareClick={handleSquareClick} />
-            <PlayerCard label="You" player={getSelfPlayer(activeGame, user)} snapshotElo={getSelfElo(activeGame, user)} time={formatClock(getSelfTime(activeGame, user, displayWhiteTimeMs, displayBlackTimeMs))} active={activeGame ? turn === myColor : false} />
-          </section>
-
-          <aside className="moves-panel">
-            <p className="eyebrow">Scoresheet</p>
-            <h2>Moves</h2>
-            <MoveTable rows={moveRows} emptyText="No moves yet." />
-          </aside>
-        </PlayPage>
-      )}
-
-      {token && page === 'replay' && replayGame && (
-        <HistoryPage>
-          <aside className="match-panel">
-            <p className="eyebrow">Replay</p>
-            <h1>Game #{replayGame.gameId}</h1>
-            <div className="player-stack">
-              <PlayerCard label="White" player={replayGame.playerWhite} snapshotElo={replayGame.playerWhiteElo} active={false} />
-              <PlayerCard label="Black" player={replayGame.playerBlack} snapshotElo={replayGame.playerBlackElo} active={false} />
-            </div>
-            <div className="panel">
-              <span>{statusLabel(replayGame.status)}</span>
-              <strong>{reasonLabel(replayGame.reasonForEnding)}</strong>
-            </div>
-          </aside>
-
-          <section className="board-area">
-            <div className="board-header">
-              <div>
-                <span className="badge">Move {replayIndex} / {replayGame.moves?.length ?? 0}</span>
-                <h2>{replayIndex === 0 ? 'Starting position' : replayGame.moves?.[replayIndex - 1]?.san}</h2>
-              </div>
-              <div className="replay-controls">
-                <button className="icon-button" title="First" onClick={() => setReplayIndex(0)}>«</button>
-                <button className="icon-button" title="Previous" onClick={() => setReplayIndex((index) => Math.max(0, index - 1))}>‹</button>
-                <button className="icon-button" title="Next" onClick={() => setReplayIndex((index) => Math.min(replayGame.moves?.length ?? 0, index + 1))}>›</button>
-                <button className="icon-button" title="Last" onClick={() => setReplayIndex(replayGame.moves?.length ?? 0)}>»</button>
-              </div>
-            </div>
-            <ChessBoard squares={replaySquares} orientation={getPlayerColor(replayGame, user) ?? 'white'} />
-          </section>
-
-          <aside className="moves-panel">
-            <p className="eyebrow">Scoresheet</p>
-            <h2>Moves</h2>
-            <MoveTable rows={replayMoveRows} emptyText="No moves recorded." />
-          </aside>
-        </HistoryPage>
-      )}
-    </main>
+      <Routes>
+        <Route element={<MainLayout token={token} user={user} onLogout={logout} />}>
+          <Route index element={<Navigate to={token ? '/play' : '/login'} replace />} />
+          <Route path="/login" element={token ? <Navigate to="/play" replace /> : <LoginPage authBusy={authBusy} onLogin={handleLogin} />} />
+          <Route path="/register" element={token ? <Navigate to="/play" replace /> : <RegisterPage authBusy={authBusy} onRegister={handleRegister} />} />
+          <Route path="/verify-email" element={<VerifyEmailPage state={verifyState} message={verifyMessage} onGoToLogin={() => navigate('/login')} />} />
+          <Route path="/play" element={token ? (
+            <PlayPage
+              activeGame={activeGame}
+              gameModes={gameModes}
+              selectedMode={selectedMode}
+              matchState={matchState}
+              moveRows={moveRows}
+              myColor={myColor}
+              turn={turn}
+              canMove={canMove}
+              activeBoardSquares={activeBoardSquares}
+              selectedSquare={selectedSquare}
+              displayWhiteTimeMs={displayWhiteTimeMs}
+              displayBlackTimeMs={displayBlackTimeMs}
+              user={user}
+              moveCount={moveCount}
+              onSelectMode={setSelectedMode}
+              onFindMatch={findMatch}
+              onCancelFindMatch={cancelFindMatch}
+              onRequestAction={requestAction}
+              onAbortGame={abortGame}
+              onDragStart={handleDragStart}
+              onDrop={handleDrop}
+              onSquareClick={handleSquareClick}
+            />
+          ) : <Navigate to="/login" replace />} />
+          <Route path="/profile" element={token ? (
+            <ProfilePage
+              user={user}
+              gamesPage={gamesPage}
+              historyLimit={historyLimit}
+              onChangeLimit={(nextLimit) => {
+                setHistoryLimit(nextLimit)
+                loadGames(1, nextLimit).catch((error) => showToast('error', error.message))
+              }}
+              onLoadGames={(pageNumber, limit) => loadGames(pageNumber, limit).catch((error) => showToast('error', error.message))}
+              onOpenReplay={openReplay}
+            />
+          ) : <Navigate to="/login" replace />} />
+          <Route path="/profile/:username" element={token ? (
+            <ProfilePage
+              user={user}
+              gamesPage={gamesPage}
+              historyLimit={historyLimit}
+              onChangeLimit={(nextLimit) => {
+                setHistoryLimit(nextLimit)
+                loadGames(1, nextLimit).catch((error) => showToast('error', error.message))
+              }}
+              onLoadGames={(pageNumber, limit) => loadGames(pageNumber, limit).catch((error) => showToast('error', error.message))}
+              onOpenReplay={openReplay}
+            />
+          ) : <Navigate to="/login" replace />} />
+          <Route path="/history/:gameId" element={token ? (
+            <HistoryPage
+              replayGame={replayGame}
+              replayIndex={replayIndex}
+              replaySquares={replaySquares}
+              replayMoveRows={replayMoveRows}
+              orientation={getPlayerColor(replayGame, user) ?? 'white'}
+              user={user}
+              onReplayIndexChange={(next) => {
+                if (typeof next === 'function') setReplayIndex(next)
+                else setReplayIndex(next)
+              }}
+            />
+          ) : <Navigate to="/login" replace />} />
+          <Route path="*" element={<Navigate to={token ? '/play' : '/login'} replace />} />
+        </Route>
+      </Routes>
+    </>
   )
 }
 
@@ -769,54 +594,6 @@ function getPlayerColor(game: Game | null, user: User | null): Color | null {
   if (game.playerWhite.userId === user.userId) return 'white'
   if (game.playerBlack.userId === user.userId) return 'black'
   return null
-}
-
-function getSelfPlayer(game: Game | null, user: User | null) {
-  const color = getPlayerColor(game, user)
-  if (!game || !color) return undefined
-  return color === 'white' ? game.playerWhite : game.playerBlack
-}
-
-function getOpponentPlayer(game: Game | null, user: User | null) {
-  const color = getPlayerColor(game, user)
-  if (!game || !color) return undefined
-  return color === 'white' ? game.playerBlack : game.playerWhite
-}
-
-function getSelfElo(game: Game | null, user: User | null) {
-  const color = getPlayerColor(game, user)
-  if (!game || !color) return undefined
-  return color === 'white' ? game.playerWhiteElo : game.playerBlackElo
-}
-
-function getOpponentElo(game: Game | null, user: User | null) {
-  const color = getPlayerColor(game, user)
-  if (!game || !color) return undefined
-  return color === 'white' ? game.playerBlackElo : game.playerWhiteElo
-}
-
-function getSelfEloChange(game: Game | null, user: User | null) {
-  const color = getPlayerColor(game, user)
-  if (!game || !color) return undefined
-  return color === 'white' ? game.playerWhiteEloChange : game.playerBlackEloChange
-}
-
-function getOpponentEloChange(game: Game | null, user: User | null) {
-  const color = getPlayerColor(game, user)
-  if (!game || !color) return undefined
-  return color === 'white' ? game.playerBlackEloChange : game.playerWhiteEloChange
-}
-
-function getSelfTime(game: Game | null, user: User | null, whiteTime: number, blackTime: number) {
-  const color = getPlayerColor(game, user)
-  if (!game || !color) return undefined
-  return color === 'white' ? whiteTime : blackTime
-}
-
-function getOpponentTime(game: Game | null, user: User | null, whiteTime: number, blackTime: number) {
-  const color = getPlayerColor(game, user)
-  if (!game || !color) return undefined
-  return color === 'white' ? blackTime : whiteTime
 }
 
 function getDisplayTime(game: Game | null, color: Color, turn: Color, matchState: MatchState, tick: number) {
@@ -840,35 +617,6 @@ function buildMoveRows(moves: string[]) {
   return rows
 }
 
-function capitalize(value: string) {
-  return value.charAt(0).toUpperCase() + value.slice(1)
-}
-
-function formatDate(value?: string | Date) {
-  if (!value) return '-'
-  return new Intl.DateTimeFormat('en-US', {
-    day: '2-digit',
-    month: 'short',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  }).format(new Date(value))
-}
-
-function formatElo(elo?: number, change?: number) {
-  if (elo === undefined) return '-'
-  if (!change) return String(elo)
-  return `${elo} ${change > 0 ? '+' : ''}${change}`
-}
-
-function formatClock(value?: number) {
-  if (value === undefined) return undefined
-  const totalSeconds = Math.ceil(Math.max(0, value) / 1000)
-  const minutes = Math.floor(totalSeconds / 60)
-  const seconds = totalSeconds % 60
-  return `${minutes}:${String(seconds).padStart(2, '0')}`
-}
-
 function confirmTitle(action: 'draw' | 'resign' | 'abort') {
   if (action === 'draw') return 'Offer a draw?'
   if (action === 'resign') return 'Resign this game?'
@@ -879,14 +627,6 @@ function confirmMessage(action: 'draw' | 'resign' | 'abort') {
   if (action === 'draw') return 'Your opponent will need to accept before the game is drawn.'
   if (action === 'resign') return 'This ends the game immediately and your opponent wins.'
   return 'Available only in the opening moves. Elo will not change.'
-}
-
-function resultTitle(game: Game, user: User | null) {
-  const color = getPlayerColor(game, user)
-  if (game.status === 'DRAW') return 'Game drawn'
-  if (!color) return 'Game over'
-  const didWin = (color === 'white' && game.status === 'WHITE_WINS') || (color === 'black' && game.status === 'BLACK_WINS')
-  return didWin ? 'You won' : 'You lost'
 }
 
 export default App
