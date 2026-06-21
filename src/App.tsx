@@ -64,6 +64,7 @@ function App() {
   const socketRef = useRef<Socket | null>(null)
   const dragSourceRef = useRef<string | null>(null)
   const activeGameRef = useRef<Game | null>(null)
+  const pendingFindModeRef = useRef<number | null>(null)
   const [matchState, setMatchState] = useState<MatchState>('idle')
   const [gameModes, setGameModes] = useState<GameMode[]>([])
   const [selectedMode, setSelectedMode] = useState<number | null>(null)
@@ -204,6 +205,16 @@ function App() {
   }, [restoreActiveGame, showToast, token, user])
 
   useEffect(() => {
+    if (!token || (matchState !== 'waiting' && matchState !== 'connecting')) return
+
+    const interval = window.setInterval(() => {
+      restoreActiveGame().catch(() => undefined)
+    }, 1200)
+
+    return () => window.clearInterval(interval)
+  }, [matchState, restoreActiveGame, token])
+
+  useEffect(() => {
     if (!token) {
       socketRef.current?.disconnect()
       socketRef.current = null
@@ -218,11 +229,19 @@ function App() {
 
     nextSocket.on('connect', () => {
       showToast('success', 'Connected to the game server.')
+      const queuedMode = pendingFindModeRef.current
+      if (queuedMode) {
+        pendingFindModeRef.current = null
+        setMatchState('waiting')
+        nextSocket.emit('findMatch', { gameModeId: queuedMode })
+        return
+      }
       if (activeGameRef.current?.status === 'IN_PROGRESS') {
         nextSocket.emit('joinGame', { gameId: activeGameRef.current.gameId })
       }
     })
     nextSocket.on('connect_error', (error) => {
+      pendingFindModeRef.current = null
       setMatchState('idle')
       showToast('error', error.message)
     })
@@ -390,11 +409,13 @@ function App() {
     }
     const socket = socketRef.current
     if (!socket?.connected) {
+      pendingFindModeRef.current = selectedMode
       setMatchState('connecting')
       showToast('info', 'Connecting socket...')
       socket?.connect()
       return
     }
+    pendingFindModeRef.current = null
     setMatchState('waiting')
     setActiveGame(null)
     setMoveLog([])
@@ -404,6 +425,7 @@ function App() {
   }
 
   function cancelFindMatch() {
+    pendingFindModeRef.current = null
     socketRef.current?.emit('cancelFindMatch')
     setMatchState('idle')
   }

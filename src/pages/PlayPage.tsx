@@ -51,6 +51,8 @@ export function PlayPage({
   onDrop: (square: Square, event: DragEvent<HTMLButtonElement>) => void
   onSquareClick: (square: Square) => void
 }) {
+  const isModeLocked = matchState === 'waiting' || matchState === 'connecting' || matchState === 'playing'
+
   return (
     <section className="play-page">
       <aside className="match-panel">
@@ -58,7 +60,7 @@ export function PlayPage({
         <div className="mode-list">
           {gameModes.length === 0 && <span className="empty compact">Loading game modes...</span>}
           {gameModes.map((mode) => (
-            <button disabled={activeGame !== null || matchState === 'waiting' || matchState === 'connecting'} className={selectedMode === mode.gameModeId ? 'mode-card selected' : 'mode-card'} key={mode.gameModeId} onClick={() => onSelectMode(mode.gameModeId)} type="button">
+            <button disabled={isModeLocked} className={selectedMode === mode.gameModeId ? 'mode-card selected' : 'mode-card'} key={mode.gameModeId} onClick={() => onSelectMode(mode.gameModeId)} type="button">
               <strong>{mode.gameModeName}</strong>
               <span>{mode.time}+{mode.plusPerMove}</span>
             </button>
