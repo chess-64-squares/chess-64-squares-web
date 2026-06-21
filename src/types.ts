@@ -40,6 +40,9 @@ export type Game = {
   playerBlackElo?: number
   playerWhiteEloChange?: number
   playerBlackEloChange?: number
+  playerWhiteTimeMs?: number
+  playerBlackTimeMs?: number
+  lastMoveAt?: string | Date | null
   fen: string
   status: GameStatus | string
   reasonForEnding: ReasonForEnding | string | null

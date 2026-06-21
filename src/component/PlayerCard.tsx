@@ -4,20 +4,23 @@ export function PlayerCard({
   label,
   player,
   snapshotElo,
-  eloChange,
+  time,
   active,
 }: {
   label: string
   player?: User
   snapshotElo?: number
-  eloChange?: number
+  time?: string
   active: boolean
 }) {
   return (
     <article className={active ? 'player-card active' : 'player-card'}>
-      <span>{label}</span>
-      <strong>{player?.username ?? '-'}</strong>
-      <small>Elo {formatElo(snapshotElo ?? player?.elo, eloChange)}</small>
+      <div>
+        <span>{label}</span>
+        <strong>{player?.username ?? '-'}</strong>
+        <small>Elo {formatElo(snapshotElo ?? player?.elo)}</small>
+      </div>
+      <time>{time ?? '--:--'}</time>
     </article>
   )
 }

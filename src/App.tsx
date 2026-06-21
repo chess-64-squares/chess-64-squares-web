@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { DragEvent, FormEvent } from 'react'
 import { io, Socket } from 'socket.io-client'
 import './App.css'
+import { AppDialog } from './component/AppDialog'
 import { ChessBoard } from './component/ChessBoard'
 import { MoveTable } from './component/MoveTable'
 import { PlayerCard } from './component/PlayerCard'
@@ -12,10 +13,30 @@ import { userService } from './service/userService'
 import { LoginPage } from './pages/LoginPage'
 import { RegisterPage } from './pages/RegisterPage'
 import { VerifyEmailPage } from './pages/VerifyEmailPage'
+import { ProfilePage } from './pages/ProfilePage'
+import { PlayPage } from './pages/PlayPage'
+import { HistoryPage } from './pages/HistoryPage'
 import type { Color, Game, GameMode, MatchState, Page, PaginatedGames, PendingOffer, Square, ToastType, User } from './types'
 
 const SOCKET_BASE = import.meta.env.VITE_SOCKET_URL ?? 'http://localhost:8000/game'
 const START_FEN = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1'
+
+function getPageFromPath(): Page {
+  const path = window.location.pathname
+  if (path === '/register') return 'register'
+  if (path === '/profile' || path.startsWith('/profile/')) return 'profile'
+  if (path.startsWith('/history/')) return 'replay'
+  if (path === '/verify-email') return 'verify-email'
+  if (path === '/play') return 'play'
+  return getStoredToken() ? 'play' : 'login'
+}
+
+function getPathForPage(page: Page, detailId?: number) {
+  if (page === 'replay') return `/history/${detailId ?? ''}`
+  if (page === 'profile') return '/profile'
+  if (page === 'play') return '/play'
+  return `/${page}`
+}
 
 function getStoredToken() {
   return localStorage.getItem(TOKEN_STORAGE_KEY) ?? ''
@@ -64,7 +85,7 @@ function reasonLabel(reason?: string | null) {
 }
 
 function App() {
-  const initialPage = window.location.pathname === '/verify-email' ? 'verify-email' : getStoredToken() ? 'play' : 'login'
+  const initialPage = getPageFromPath()
   const initialVerifyToken = initialPage === 'verify-email' ? new URLSearchParams(window.location.search).get('token') : null
   const [page, setPage] = useState<Page>(initialPage)
   const [token, setToken] = useState(getStoredToken)
@@ -84,6 +105,9 @@ function App() {
   const [moveCount, setMoveCount] = useState(0)
   const [pendingOffer, setPendingOffer] = useState<PendingOffer | null>(null)
   const [selectedSquare, setSelectedSquare] = useState<string | null>(null)
+  const [confirmAction, setConfirmAction] = useState<'draw' | 'resign' | 'abort' | null>(null)
+  const [resultGame, setResultGame] = useState<Game | null>(null)
+  const [clockTick, setClockTick] = useState(0)
 
   const [gamesPage, setGamesPage] = useState<PaginatedGames>({ items: [], total: 0, page: 1, limit: 10, totalPages: 1 })
   const [historyLimit, setHistoryLimit] = useState(10)
@@ -94,11 +118,31 @@ function App() {
     setToast({ type, message })
   }, [])
 
+  const navigate = useCallback((nextPage: Page, detailId?: number) => {
+    const nextPath = getPathForPage(nextPage, detailId)
+    if (window.location.pathname !== nextPath) {
+      window.history.pushState({}, '', nextPath)
+    }
+    setPage(nextPage)
+  }, [])
+
+  useEffect(() => {
+    const syncRoute = () => setPage(getPageFromPath())
+    window.addEventListener('popstate', syncRoute)
+    return () => window.removeEventListener('popstate', syncRoute)
+  }, [])
+
   useEffect(() => {
     if (!toast) return
     const timeout = window.setTimeout(() => setToast(null), 4200)
     return () => window.clearTimeout(timeout)
   }, [toast])
+
+  useEffect(() => {
+    if (matchState !== 'playing') return
+    const interval = window.setInterval(() => setClockTick((value) => value + 1), 1000)
+    return () => window.clearInterval(interval)
+  }, [matchState])
 
   useEffect(() => {
     if (page !== 'verify-email') return
@@ -152,6 +196,24 @@ function App() {
   )
 
   useEffect(() => {
+    if (!token || page !== 'replay') return
+    const gameId = Number(window.location.pathname.split('/').at(-1))
+    if (!Number.isInteger(gameId) || gameId <= 0 || replayGame?.gameId === gameId) return
+    gameService.getDetail(gameId, token)
+      .then((game) => {
+        setReplayGame(game)
+        setReplayIndex(0)
+      })
+      .catch((error) => showToast('error', error instanceof Error ? error.message : 'Could not load game detail.'))
+  }, [page, replayGame?.gameId, showToast, token])
+
+  useEffect(() => {
+    if (token && page === 'profile' && user) {
+      loadGames(1, historyLimit).catch((error) => showToast('error', error.message))
+    }
+  }, [historyLimit, loadGames, page, showToast, token, user])
+
+  useEffect(() => {
     if (!token) {
       socketRef.current?.disconnect()
       socketRef.current = null
@@ -174,36 +236,51 @@ function App() {
     })
     nextSocket.on('matchFound', (game: Game) => {
       setActiveGame(game)
+      setResultGame(null)
       setMoveLog([])
       setMoveCount(0)
       setSelectedSquare(null)
       setMatchState('playing')
-      setPage('play')
+      navigate('play')
       showToast('success', 'Opponent found.')
     })
     nextSocket.on('gameState', (game: Game) => {
       setActiveGame(game)
       setMatchState(game.status === 'IN_PROGRESS' ? 'playing' : 'ended')
     })
-    nextSocket.on('moveMade', (move: { fen: string; san: string; gameId: number; moveCount?: number }) => {
-      setActiveGame((current) => (current ? { ...current, fen: move.fen } : current))
+    nextSocket.on('moveMade', (move: Partial<Game> & { fen: string; san: string; gameId: number; moveCount?: number }) => {
+      setActiveGame((current) =>
+        current
+          ? {
+            ...current,
+            fen: move.fen,
+            playerWhiteTimeMs: move.playerWhiteTimeMs ?? current.playerWhiteTimeMs,
+            playerBlackTimeMs: move.playerBlackTimeMs ?? current.playerBlackTimeMs,
+            lastMoveAt: move.lastMoveAt ?? current.lastMoveAt,
+          }
+          : current,
+      )
       setMoveLog((current) => [...current, move.san])
       setMoveCount((current) => move.moveCount ?? current + 1)
       setSelectedSquare(null)
     })
     nextSocket.on('gameOver', (payload: Partial<Game> & { status: string; reasonForEnding: string | null }) => {
-      setActiveGame((current) =>
-        current
+      setActiveGame((current) => {
+        const nextGame = current
           ? {
-              ...current,
-              status: payload.status,
-              reasonForEnding: payload.reasonForEnding,
-              playerWhite: payload.playerWhite ?? current.playerWhite,
-              playerBlack: payload.playerBlack ?? current.playerBlack,
-              playerWhiteEloChange: payload.playerWhiteEloChange ?? current.playerWhiteEloChange,
-              playerBlackEloChange: payload.playerBlackEloChange ?? current.playerBlackEloChange,
-            }
-          : current,
+            ...current,
+            status: payload.status,
+            reasonForEnding: payload.reasonForEnding,
+            playerWhite: payload.playerWhite ?? current.playerWhite,
+            playerBlack: payload.playerBlack ?? current.playerBlack,
+            playerWhiteTimeMs: payload.playerWhiteTimeMs ?? current.playerWhiteTimeMs,
+            playerBlackTimeMs: payload.playerBlackTimeMs ?? current.playerBlackTimeMs,
+            lastMoveAt: payload.lastMoveAt ?? current.lastMoveAt,
+          }
+          : null
+        if (nextGame) setResultGame(nextGame)
+        return nextGame
+      },
       )
       setMatchState('ended')
       showToast('info', `Game over: ${statusLabel(payload.status)}.`)
@@ -239,11 +316,21 @@ function App() {
   const myColor = getPlayerColor(activeGame, user)
   const turn = (activeGame?.fen ?? START_FEN).split(' ')[1] === 'w' ? 'white' : 'black'
   const canMove = matchState === 'playing' && myColor === turn
+  const displayWhiteTimeMs = getDisplayTime(activeGame, 'white', turn, matchState, clockTick)
+  const displayBlackTimeMs = getDisplayTime(activeGame, 'black', turn, matchState, clockTick)
   const activeBoardSquares = useMemo(() => orientSquares(parseFen(activeGame?.fen ?? START_FEN), myColor), [activeGame, myColor])
   const replayFen = replayIndex === 0 ? START_FEN : replayGame?.moves?.[replayIndex - 1]?.fen ?? replayGame?.fen ?? START_FEN
   const replaySquares = useMemo(() => orientSquares(parseFen(replayFen), getPlayerColor(replayGame, user) ?? 'white'), [replayFen, replayGame, user])
   const moveRows = useMemo(() => buildMoveRows(moveLog), [moveLog])
   const replayMoveRows = useMemo(() => buildMoveRows(replayGame?.moves?.map((move) => move.san) ?? []), [replayGame])
+
+  useEffect(() => {
+    if (!activeGame || matchState !== 'playing') return
+    const currentTime = turn === 'white' ? displayWhiteTimeMs : displayBlackTimeMs
+    if (currentTime <= 0) {
+      socketRef.current?.emit('flagTimeout', { gameId: activeGame.gameId })
+    }
+  }, [activeGame, displayBlackTimeMs, displayWhiteTimeMs, matchState, turn])
 
   function logout() {
     localStorage.removeItem(TOKEN_STORAGE_KEY)
@@ -251,8 +338,9 @@ function App() {
     setUser(null)
     setGamesPage({ items: [], total: 0, page: 1, limit: 10, totalPages: 1 })
     setActiveGame(null)
+    setResultGame(null)
     setMatchState('idle')
-    setPage('login')
+    navigate('login')
   }
 
   async function handleLogin(event: FormEvent<HTMLFormElement>) {
@@ -270,7 +358,7 @@ function App() {
       }
       localStorage.setItem(TOKEN_STORAGE_KEY, response.data.token)
       setToken(response.data.token)
-      setPage('play')
+      navigate('play')
       showToast('success', 'Signed in successfully.')
     } catch (error) {
       showToast('error', error instanceof Error ? error.message : 'Sign in failed.')
@@ -291,7 +379,7 @@ function App() {
         password: String(form.get('password') ?? ''),
       })
       showToast('success', 'Account created. Check your email to verify it.')
-      setPage('login')
+      navigate('login')
     } catch (error) {
       showToast('error', error instanceof Error ? error.message : 'Registration failed.')
     } finally {
@@ -326,15 +414,27 @@ function App() {
 
   function requestAction(type: 'draw' | 'resign') {
     if (!activeGame) return
-    const text = type === 'draw' ? 'send a draw request' : 'send a resignation request'
-    if (!window.confirm(`Are you sure you want to ${text}?`)) return
-    socketRef.current?.emit('requestGameAction', { gameId: activeGame.gameId, type })
+    setConfirmAction(type)
   }
 
   function abortGame() {
     if (!activeGame) return
-    if (!window.confirm('Abort this game? Elo will not change.')) return
-    socketRef.current?.emit('abortGame', { gameId: activeGame.gameId })
+    setConfirmAction('abort')
+  }
+
+  function runConfirmedAction() {
+    if (!activeGame || !confirmAction) return
+
+    if (confirmAction === 'draw') {
+      socketRef.current?.emit('requestGameAction', { gameId: activeGame.gameId, type: 'draw' })
+    }
+    if (confirmAction === 'resign') {
+      socketRef.current?.emit('resign', { gameId: activeGame.gameId })
+    }
+    if (confirmAction === 'abort') {
+      socketRef.current?.emit('abortGame', { gameId: activeGame.gameId })
+    }
+    setConfirmAction(null)
   }
 
   function respondOffer(accepted: boolean) {
@@ -400,7 +500,7 @@ function App() {
       const game = await gameService.getDetail(gameId, token)
       setReplayGame(game)
       setReplayIndex(0)
-      setPage('replay')
+      navigate('replay', game.gameId)
     } catch (error) {
       showToast('error', error instanceof Error ? error.message : 'Could not load game detail.')
     }
@@ -409,20 +509,20 @@ function App() {
   return (
     <main className="app-shell">
       <nav className="topbar">
-        <button className="brand" onClick={() => setPage(token ? 'play' : 'login')} type="button">
+        <button className="brand" onClick={() => navigate(token ? 'play' : 'login')} type="button">
           <span className="brand-mark">64</span>
           <span>Chess 64 Squares</span>
         </button>
         <div className="nav-actions">
           {token ? (
             <>
-              <button className={page === 'play' ? 'nav-link active' : 'nav-link'} onClick={() => setPage('play')}>
+              <button className={page === 'play' ? 'nav-link active' : 'nav-link'} onClick={() => navigate('play')}>
                 Play
               </button>
               <button
                 className={page === 'profile' ? 'nav-link active' : 'nav-link'}
                 onClick={() => {
-                  setPage('profile')
+                  navigate('profile')
                   loadGames(1, historyLimit).catch((error) => showToast('error', error.message))
                 }}
               >
@@ -434,10 +534,10 @@ function App() {
             </>
           ) : (
             <>
-              <button className={page === 'login' ? 'nav-link active' : 'nav-link'} onClick={() => setPage('login')}>
+              <button className={page === 'login' ? 'nav-link active' : 'nav-link'} onClick={() => navigate('login')}>
                 Sign in
               </button>
-              <button className="button primary small" onClick={() => setPage('register')}>
+              <button className="button primary small" onClick={() => navigate('register')}>
                 Register
               </button>
             </>
@@ -458,8 +558,33 @@ function App() {
         </div>
       )}
 
+      {confirmAction && (
+        <AppDialog title={confirmTitle(confirmAction)} message={confirmMessage(confirmAction)}>
+          <button className="button tertiary" onClick={() => setConfirmAction(null)}>Cancel</button>
+          <button className={confirmAction === 'resign' ? 'button tertiary danger' : 'button primary'} onClick={runConfirmedAction}>
+            Confirm
+          </button>
+        </AppDialog>
+      )}
+
+      {resultGame && (
+        <AppDialog title={resultTitle(resultGame, user)} message={`${statusLabel(resultGame.status)} · ${reasonLabel(resultGame.reasonForEnding)}`}>
+          <button className="button tertiary" onClick={() => navigate('profile')}>View history</button>
+          <button className="button primary" onClick={() => {
+            setResultGame(null)
+            setActiveGame(null)
+            setMoveLog([])
+            setMoveCount(0)
+            setMatchState('idle')
+            navigate('play')
+          }}>
+            Find another match
+          </button>
+        </AppDialog>
+      )}
+
       {page === 'verify-email' && (
-        <VerifyEmailPage state={verifyState} message={verifyMessage} onGoToLogin={() => setPage('login')} />
+        <VerifyEmailPage state={verifyState} message={verifyMessage} onGoToLogin={() => navigate('login')} />
       )}
 
       {!token && page === 'login' && (
@@ -471,7 +596,7 @@ function App() {
       )}
 
       {token && page === 'profile' && (
-        <section className="profile-page">
+        <ProfilePage>
           <div className="page-heading">
             <p className="eyebrow">Profile</p>
             <h1>{user?.username ?? 'Player'}</h1>
@@ -530,15 +655,15 @@ function App() {
               <button className="button tertiary small" disabled={gamesPage.page >= gamesPage.totalPages} onClick={() => loadGames(gamesPage.page + 1, historyLimit)}>Next</button>
             </div>
           </section>
-        </section>
+        </ProfilePage>
       )}
 
       {token && page === 'play' && (
-        <section className="play-page">
+        <PlayPage>
           <aside className="match-panel">
             <p className="eyebrow">Matchmaking</p>
             <h1>Ready for 64 squares</h1>
-            {!activeGame && (
+            {(!activeGame || matchState === 'ended') && (
               <div className="mode-list">
                 {gameModes.length === 0 && <span className="empty compact">Loading game modes...</span>}
                 {gameModes.map((mode) => (
@@ -553,7 +678,7 @@ function App() {
               {matchState === 'waiting' || matchState === 'connecting' ? (
                 <button className="button secondary" onClick={cancelFindMatch}>Cancel search</button>
               ) : (
-                !activeGame && <button className="button primary" onClick={findMatch} disabled={!selectedMode}>Find opponent</button>
+                (!activeGame || matchState === 'ended') && <button className="button primary" onClick={findMatch} disabled={!selectedMode}>Find opponent</button>
               )}
               {(matchState === 'waiting' || matchState === 'connecting') && <span className="loading-inline"><span /> Searching...</span>}
             </div>
@@ -580,9 +705,9 @@ function App() {
               </div>
             </div>
 
-            <PlayerCard label="Opponent" player={getOpponentPlayer(activeGame, user)} snapshotElo={getOpponentElo(activeGame, user)} eloChange={getOpponentEloChange(activeGame, user)} active={activeGame ? turn !== myColor : false} />
+            <PlayerCard label="Opponent" player={getOpponentPlayer(activeGame, user)} snapshotElo={getOpponentElo(activeGame, user)} time={formatClock(getOpponentTime(activeGame, user, displayWhiteTimeMs, displayBlackTimeMs))} active={activeGame ? turn !== myColor : false} />
             <ChessBoard squares={activeBoardSquares} orientation={myColor ?? 'white'} selectedSquare={selectedSquare} onDragStart={handleDragStart} onDrop={handleDrop} onSquareClick={handleSquareClick} />
-            <PlayerCard label="You" player={getSelfPlayer(activeGame, user)} snapshotElo={getSelfElo(activeGame, user)} eloChange={getSelfEloChange(activeGame, user)} active={activeGame ? turn === myColor : false} />
+            <PlayerCard label="You" player={getSelfPlayer(activeGame, user)} snapshotElo={getSelfElo(activeGame, user)} time={formatClock(getSelfTime(activeGame, user, displayWhiteTimeMs, displayBlackTimeMs))} active={activeGame ? turn === myColor : false} />
           </section>
 
           <aside className="moves-panel">
@@ -590,17 +715,17 @@ function App() {
             <h2>Moves</h2>
             <MoveTable rows={moveRows} emptyText="No moves yet." />
           </aside>
-        </section>
+        </PlayPage>
       )}
 
       {token && page === 'replay' && replayGame && (
-        <section className="play-page replay-page">
+        <HistoryPage>
           <aside className="match-panel">
             <p className="eyebrow">Replay</p>
             <h1>Game #{replayGame.gameId}</h1>
             <div className="player-stack">
-              <PlayerCard label="White" player={replayGame.playerWhite} snapshotElo={replayGame.playerWhiteElo} eloChange={replayGame.playerWhiteEloChange} active={false} />
-              <PlayerCard label="Black" player={replayGame.playerBlack} snapshotElo={replayGame.playerBlackElo} eloChange={replayGame.playerBlackEloChange} active={false} />
+              <PlayerCard label="White" player={replayGame.playerWhite} snapshotElo={replayGame.playerWhiteElo} active={false} />
+              <PlayerCard label="Black" player={replayGame.playerBlack} snapshotElo={replayGame.playerBlackElo} active={false} />
             </div>
             <div className="panel">
               <span>{statusLabel(replayGame.status)}</span>
@@ -629,7 +754,7 @@ function App() {
             <h2>Moves</h2>
             <MoveTable rows={replayMoveRows} emptyText="No moves recorded." />
           </aside>
-        </section>
+        </HistoryPage>
       )}
     </main>
   )
@@ -682,6 +807,26 @@ function getOpponentEloChange(game: Game | null, user: User | null) {
   return color === 'white' ? game.playerBlackEloChange : game.playerWhiteEloChange
 }
 
+function getSelfTime(game: Game | null, user: User | null, whiteTime: number, blackTime: number) {
+  const color = getPlayerColor(game, user)
+  if (!game || !color) return undefined
+  return color === 'white' ? whiteTime : blackTime
+}
+
+function getOpponentTime(game: Game | null, user: User | null, whiteTime: number, blackTime: number) {
+  const color = getPlayerColor(game, user)
+  if (!game || !color) return undefined
+  return color === 'white' ? blackTime : whiteTime
+}
+
+function getDisplayTime(game: Game | null, color: Color, turn: Color, matchState: MatchState, tick: number) {
+  void tick
+  if (!game) return 0
+  const base = color === 'white' ? game.playerWhiteTimeMs ?? 0 : game.playerBlackTimeMs ?? 0
+  if (matchState !== 'playing' || turn !== color || !game.lastMoveAt) return base
+  return Math.max(0, base - (Date.now() - new Date(game.lastMoveAt).getTime()))
+}
+
 function isMyPiece(piece: string, color: Color | null) {
   if (!color) return false
   return color === 'white' ? piece === piece.toUpperCase() : piece === piece.toLowerCase()
@@ -714,6 +859,34 @@ function formatElo(elo?: number, change?: number) {
   if (elo === undefined) return '-'
   if (!change) return String(elo)
   return `${elo} ${change > 0 ? '+' : ''}${change}`
+}
+
+function formatClock(value?: number) {
+  if (value === undefined) return undefined
+  const totalSeconds = Math.ceil(Math.max(0, value) / 1000)
+  const minutes = Math.floor(totalSeconds / 60)
+  const seconds = totalSeconds % 60
+  return `${minutes}:${String(seconds).padStart(2, '0')}`
+}
+
+function confirmTitle(action: 'draw' | 'resign' | 'abort') {
+  if (action === 'draw') return 'Offer a draw?'
+  if (action === 'resign') return 'Resign this game?'
+  return 'Abort this game?'
+}
+
+function confirmMessage(action: 'draw' | 'resign' | 'abort') {
+  if (action === 'draw') return 'Your opponent will need to accept before the game is drawn.'
+  if (action === 'resign') return 'This ends the game immediately and your opponent wins.'
+  return 'Available only in the opening moves. Elo will not change.'
+}
+
+function resultTitle(game: Game, user: User | null) {
+  const color = getPlayerColor(game, user)
+  if (game.status === 'DRAW') return 'Game drawn'
+  if (!color) return 'Game over'
+  const didWin = (color === 'white' && game.status === 'WHITE_WINS') || (color === 'black' && game.status === 'BLACK_WINS')
+  return didWin ? 'You won' : 'You lost'
 }
 
 export default App

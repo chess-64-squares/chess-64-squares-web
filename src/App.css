@@ -158,6 +158,45 @@
   gap: 8px;
 }
 
+.dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: grid;
+  place-items: center;
+  background: rgba(32, 21, 21, 0.34);
+  padding: 24px;
+}
+
+.dialog-card {
+  width: min(420px, 100%);
+  border: 1px solid var(--ink);
+  border-radius: 12px;
+  background: var(--canvas);
+  padding: 24px;
+  box-shadow: 0 24px 80px rgba(32, 21, 21, 0.24);
+}
+
+.dialog-card h2 {
+  margin: 0 0 8px;
+  font-family: "Degular Display", Inter, system-ui, sans-serif;
+  font-size: 32px;
+  font-weight: 500;
+  line-height: 1.1;
+}
+
+.dialog-card p {
+  color: var(--body);
+}
+
+.dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 22px;
+  flex-wrap: wrap;
+}
+
 .auth-page {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(320px, 440px);
@@ -331,12 +370,12 @@
 
 .play-page {
   display: grid;
-  grid-template-columns: minmax(260px, 320px) minmax(360px, 680px) minmax(240px, 300px);
+  grid-template-columns: minmax(220px, 280px) minmax(360px, 560px) minmax(250px, 320px);
   gap: 24px;
   align-items: start;
-  width: min(1320px, calc(100% - 32px));
+  width: min(1240px, calc(100% - 32px));
   margin: 0 auto;
-  padding: 32px 0 64px;
+  padding: 20px 0 40px;
 }
 
 .match-panel,
@@ -345,6 +384,18 @@
   top: 86px;
   display: grid;
   gap: 18px;
+}
+
+.match-panel {
+  grid-column: 3;
+}
+
+.board-area {
+  grid-column: 2;
+}
+
+.moves-panel {
+  grid-column: 1;
 }
 
 .mode-list,
@@ -377,7 +428,9 @@
 
 .mode-card,
 .player-card {
-  display: grid;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   gap: 4px;
   width: 100%;
   border: 1px solid var(--mute);
@@ -386,6 +439,23 @@
   color: var(--ink);
   padding: 14px;
   text-align: left;
+}
+
+.player-card div {
+  display: grid;
+  gap: 3px;
+}
+
+.player-card time {
+  border-radius: 8px;
+  background: var(--ink);
+  color: var(--canvas);
+  padding: 8px 10px;
+  font-size: 18px;
+  font-weight: 800;
+  line-height: 1;
+  min-width: 72px;
+  text-align: center;
 }
 
 .mode-card {
@@ -430,54 +500,12 @@
 }
 
 .board-frame {
-  display: grid;
-  grid-template-columns: 24px minmax(0, 1fr);
-  grid-template-rows: minmax(0, 1fr) 24px;
-  gap: 4px;
-  width: min(100%, 680px);
-}
-
-.rank-labels {
-  display: grid;
-  grid-template-rows: repeat(8, minmax(0, 1fr));
-  grid-column: 1;
-  grid-row: 1;
-  height: 100%;
-}
-
-.rank-labels span,
-.file-labels span {
-  color: var(--body);
-  font-size: 12px;
-  font-weight: 700;
-  line-height: 1;
-}
-
-.rank-labels span {
-  align-self: start;
-  justify-self: start;
-  padding-top: 2px;
-}
-
-.file-labels {
-  display: grid;
-  grid-template-columns: repeat(8, minmax(0, 1fr));
-  grid-column: 2;
-  grid-row: 2;
-}
-
-.file-labels span {
-  align-self: end;
-  justify-self: start;
-  padding-left: 2px;
+  width: min(100%, 560px, calc(100vh - 250px));
+  min-width: 300px;
 }
 
 .chess-board {
-  display: grid;
-  grid-column: 2;
-  grid-row: 1;
-  grid-template-columns: repeat(8, minmax(0, 1fr));
-  grid-template-rows: repeat(8, minmax(0, 1fr));
+  position: relative;
   aspect-ratio: 1;
   overflow: hidden;
   border: 2px solid var(--ink);
@@ -489,10 +517,11 @@
 
 .square {
   position: relative;
+  position: absolute;
+  left: calc(var(--file) * 12.5%);
+  top: calc(var(--rank) * 12.5%);
   display: grid;
-  min-width: 0;
-  min-height: 0;
-  width: 100%;
+  width: 12.5%;
   aspect-ratio: 1;
   place-items: center;
   border: 0;
@@ -501,11 +530,27 @@
 }
 
 .square img {
-  width: 78%;
-  height: 78%;
+  width: 88%;
+  height: 88%;
   object-fit: contain;
   cursor: grab;
   filter: drop-shadow(0 6px 8px rgba(32, 21, 21, 0.22));
+}
+
+.coordinates {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  pointer-events: none;
+  font-weight: 800;
+}
+
+.coordinate-light {
+  fill: rgba(255, 254, 251, 0.9);
+}
+
+.coordinate-dark {
+  fill: rgba(32, 21, 21, 0.72);
 }
 
 .square img:active {
@@ -523,7 +568,7 @@
 
 .moves-table {
   display: grid;
-  max-height: 520px;
+  max-height: calc(100vh - 190px);
   overflow: auto;
 }
 
@@ -577,12 +622,18 @@
 
 @media (max-width: 1120px) {
   .play-page {
-    grid-template-columns: minmax(240px, 320px) minmax(360px, 1fr);
+    grid-template-columns: minmax(220px, 280px) minmax(360px, 1fr);
   }
 
   .moves-panel {
     position: static;
     grid-column: 1 / -1;
+    order: 3;
+  }
+
+  .match-panel,
+  .board-area {
+    grid-column: auto;
   }
 }
 
@@ -609,6 +660,11 @@
 
   .match-panel {
     position: static;
+  }
+
+  .moves-panel {
+    grid-column: auto;
+    order: initial;
   }
 
   .game-row {
