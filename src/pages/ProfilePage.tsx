@@ -1,6 +1,11 @@
 import type { Game, PaginatedGames, User } from '../types'
 import { formatDate, formatElo, getEloChange, reasonLabel, statusLabel } from '../utils/uiFormat'
 
+import DoubleArrowLeft from "../assets/icon/double-arrow-left.svg?react"
+import DoubleArrowRight from "../assets/icon/double-arrow-right.svg?react"
+import SingleArrowLeft from "../assets/icon/single-arrow-left.svg?react"
+import SingleArrowRight from "../assets/icon/single-arrow-right.svg?react"
+
 export function ProfilePage({
   user,
   gamesPage,
@@ -54,11 +59,11 @@ export function ProfilePage({
           ))}
         </div>
         <div className="pagination">
-          <button className="icon-button" title="First page" disabled={gamesPage.page <= 1} onClick={() => onLoadGames(1, historyLimit)}>«</button>
-          <button className="icon-button" title="Previous page" disabled={gamesPage.page <= 1} onClick={() => onLoadGames(gamesPage.page - 1, historyLimit)}>‹</button>
+          <button className="icon-button" title="First page" disabled={gamesPage.page <= 1} onClick={() => onLoadGames(1, historyLimit)}><DoubleArrowLeft/></button>
+          <button className="icon-button" title="Previous page" disabled={gamesPage.page <= 1} onClick={() => onLoadGames(gamesPage.page - 1, historyLimit)}><SingleArrowLeft/></button>
           <span>Page {gamesPage.page} of {gamesPage.totalPages}</span>
-          <button className="icon-button" title="Next page" disabled={gamesPage.page >= gamesPage.totalPages} onClick={() => onLoadGames(gamesPage.page + 1, historyLimit)}>›</button>
-          <button className="icon-button" title="Last page" disabled={gamesPage.page >= gamesPage.totalPages} onClick={() => onLoadGames(gamesPage.totalPages, historyLimit)}>»</button>
+          <button className="icon-button" title="Next page" disabled={gamesPage.page >= gamesPage.totalPages} onClick={() => onLoadGames(gamesPage.page + 1, historyLimit)}><SingleArrowRight/></button>
+          <button className="icon-button" title="Last page" disabled={gamesPage.page >= gamesPage.totalPages} onClick={() => onLoadGames(gamesPage.totalPages, historyLimit)}><DoubleArrowRight/></button>
         </div>
       </section>
     </section>

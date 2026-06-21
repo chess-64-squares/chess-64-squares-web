@@ -384,6 +384,7 @@
   align-items: center;
   justify-content: space-between;
   gap: 16px;
+  margin: 10px 0px;
 }
 
 .section-title h2,
@@ -561,6 +562,7 @@
 .board-area {
   display: grid;
   min-width: 0;
+  margin: 10px 0;
 }
 
 .badge,

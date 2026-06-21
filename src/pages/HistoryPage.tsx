@@ -5,6 +5,11 @@ import { PlayerCard } from '../component/PlayerCard'
 import type { Color, Game, Square, User } from '../types'
 import { getEloChange, reasonLabel, statusLabel } from '../utils/uiFormat'
 
+import DoubleArrowLeft from "../assets/icon/double-arrow-left.svg?react"
+import DoubleArrowRight from "../assets/icon/double-arrow-right.svg?react"
+import SingleArrowLeft from "../assets/icon/single-arrow-left.svg?react"
+import SingleArrowRight from "../assets/icon/single-arrow-right.svg?react"
+
 export function HistoryPage({
   replayGame,
   replayIndex,
@@ -56,16 +61,13 @@ export function HistoryPage({
       </aside>
 
       <section className="board-area">
-        <div className="board-header">
-          <h1>History</h1>
-        </div>
         <ChessBoard squares={replaySquares} orientation={orientation} />
         <div className="board-header">
           <div className="replay-controls">
-            <button className="icon-button" title="First" onClick={() => onReplayIndexChange(0)}>«</button>
-            <button className="icon-button" title="Previous" onClick={() => onReplayIndexChange((index) => Math.max(0, index - 1))}>‹</button>
-            <button className="icon-button" title="Next" onClick={() => onReplayIndexChange((index) => Math.min(replayGame.moves?.length ?? 0, index + 1))}>›</button>
-            <button className="icon-button" title="Last" onClick={() => onReplayIndexChange(replayGame.moves?.length ?? 0)}>»</button>
+            <button className="icon-button" title="First" onClick={() => onReplayIndexChange(0)}><DoubleArrowLeft/></button>
+            <button className="icon-button" title="Previous" onClick={() => onReplayIndexChange((index) => Math.max(0, index - 1))}><SingleArrowLeft/></button>
+            <button className="icon-button" title="Next" onClick={() => onReplayIndexChange((index) => Math.min(replayGame.moves?.length ?? 0, index + 1))}><SingleArrowRight/></button>
+            <button className="icon-button" title="Last" onClick={() => onReplayIndexChange(replayGame.moves?.length ?? 0)}><DoubleArrowRight/></button>
           </div>
         </div>
       </section>
