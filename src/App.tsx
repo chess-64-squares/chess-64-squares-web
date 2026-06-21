@@ -1,127 +1,24 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { DragEvent, FormEvent, ReactNode } from 'react'
+import type { DragEvent, FormEvent } from 'react'
 import { io, Socket } from 'socket.io-client'
 import './App.css'
+import { ChessBoard } from './component/ChessBoard'
+import { MoveTable } from './component/MoveTable'
+import { PlayerCard } from './component/PlayerCard'
+import { TOKEN_STORAGE_KEY } from './connect/connect'
+import { authService } from './service/authService'
+import { gameService } from './service/gameService'
+import { userService } from './service/userService'
+import { LoginPage } from './pages/LoginPage'
+import { RegisterPage } from './pages/RegisterPage'
+import { VerifyEmailPage } from './pages/VerifyEmailPage'
+import type { Color, Game, GameMode, MatchState, Page, PaginatedGames, PendingOffer, Square, ToastType, User } from './types'
 
-type Page = 'login' | 'register' | 'profile' | 'play' | 'verify-email' | 'replay'
-type ToastType = 'success' | 'error' | 'warning' | 'info'
-type MatchState = 'idle' | 'connecting' | 'waiting' | 'playing' | 'ended'
-type Color = 'white' | 'black'
-
-type ApiResponse<T> = {
-  success: boolean
-  message: string
-  data: T | null
-  errorCode?: string
-}
-
-type User = {
-  userId: number
-  username: string
-  email?: string
-  elo: number
-  status: string
-  isEmailVerified?: boolean
-  createdAt?: string
-}
-
-type GameMode = {
-  gameModeId: number
-  gameModeName: string
-  time: number
-  plusPerMove: number
-}
-
-type Move = {
-  moveNumber: number
-  isWhite: boolean
-  san: string
-  fen: string
-}
-
-type Game = {
-  gameId: number
-  playerWhite: User
-  playerBlack: User
-  gameMode?: GameMode
-  playerWhiteElo?: number
-  playerBlackElo?: number
-  fen: string
-  status: string
-  reasonForEnding: string | null
-  date?: string
-  moves?: Move[]
-}
-
-type PaginatedGames = {
-  items: Game[]
-  total: number
-  page: number
-  limit: number
-  totalPages: number
-}
-
-type Square = {
-  name: string
-  piece: string | null
-}
-
-type PendingOffer = {
-  offerId: string
-  gameId: number
-  type: 'draw' | 'resign'
-  fromUserId: number
-}
-
-const API_BASE = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000/api/v1'
 const SOCKET_BASE = import.meta.env.VITE_SOCKET_URL ?? 'http://localhost:8000/game'
 const START_FEN = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1'
 
-const defaultGameModes: GameMode[] = [
-  { gameModeId: 1, gameModeName: 'Rapid 10+0', time: 10, plusPerMove: 0 },
-  { gameModeId: 2, gameModeName: 'Blitz 5+0', time: 5, plusPerMove: 0 },
-  { gameModeId: 3, gameModeName: 'Bullet 1+0', time: 1, plusPerMove: 0 },
-]
-
-const pieceImages: Record<string, string> = {
-  p: new URL('./assets/chess/chessman/default/bp.png', import.meta.url).href,
-  r: new URL('./assets/chess/chessman/default/br.png', import.meta.url).href,
-  n: new URL('./assets/chess/chessman/default/bn.png', import.meta.url).href,
-  b: new URL('./assets/chess/chessman/default/bb.png', import.meta.url).href,
-  q: new URL('./assets/chess/chessman/default/bq.png', import.meta.url).href,
-  k: new URL('./assets/chess/chessman/default/bk.png', import.meta.url).href,
-  P: new URL('./assets/chess/chessman/default/wp.png', import.meta.url).href,
-  R: new URL('./assets/chess/chessman/default/wr.png', import.meta.url).href,
-  N: new URL('./assets/chess/chessman/default/wn.png', import.meta.url).href,
-  B: new URL('./assets/chess/chessman/default/wb.png', import.meta.url).href,
-  Q: new URL('./assets/chess/chessman/default/wq.png', import.meta.url).href,
-  K: new URL('./assets/chess/chessman/default/wk.png', import.meta.url).href,
-}
-
 function getStoredToken() {
-  return localStorage.getItem('chess64.token') ?? ''
-}
-
-async function request<T>(path: string, options: RequestInit = {}, token = '') {
-  let response: Response
-  try {
-    response = await fetch(`${API_BASE}${path}`, {
-      ...options,
-      headers: {
-        'Content-Type': 'application/json',
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        ...options.headers,
-      },
-    })
-  } catch {
-    throw new Error(`Could not connect to the API at ${API_BASE}.`)
-  }
-
-  const body = (await response.json().catch(() => null)) as ApiResponse<T> | null
-  if (!response.ok || !body?.success) {
-    throw new Error(body?.message ?? 'Request failed')
-  }
-  return body.data as T
+  return localStorage.getItem(TOKEN_STORAGE_KEY) ?? ''
 }
 
 function parseFen(fen: string): Square[] {
@@ -180,12 +77,13 @@ function App() {
   const socketRef = useRef<Socket | null>(null)
   const dragSourceRef = useRef<string | null>(null)
   const [matchState, setMatchState] = useState<MatchState>('idle')
-  const [gameModes, setGameModes] = useState<GameMode[]>(defaultGameModes)
-  const [selectedMode, setSelectedMode] = useState(defaultGameModes[0].gameModeId)
+  const [gameModes, setGameModes] = useState<GameMode[]>([])
+  const [selectedMode, setSelectedMode] = useState<number | null>(null)
   const [activeGame, setActiveGame] = useState<Game | null>(null)
   const [moveLog, setMoveLog] = useState<string[]>([])
   const [moveCount, setMoveCount] = useState(0)
   const [pendingOffer, setPendingOffer] = useState<PendingOffer | null>(null)
+  const [selectedSquare, setSelectedSquare] = useState<string | null>(null)
 
   const [gamesPage, setGamesPage] = useState<PaginatedGames>({ items: [], total: 0, page: 1, limit: 10, totalPages: 1 })
   const [historyLimit, setHistoryLimit] = useState(10)
@@ -211,10 +109,7 @@ function App() {
       return
     }
 
-    request('/auth/verify-email', {
-      method: 'POST',
-      body: JSON.stringify({ token: verifyToken }),
-    })
+    authService.verifyEmail({ token: verifyToken, email: '', otp: '' })
       .then(() => {
         setVerifyState('success')
         setVerifyMessage('Your email has been verified. You can sign in now.')
@@ -227,13 +122,13 @@ function App() {
 
   const refreshProfile = useCallback(() => {
     if (!token) return Promise.resolve()
-    return request<User>('/user/profile', {}, token).then(setUser)
+    return userService.getProfile(token).then(setUser)
   }, [token])
 
   useEffect(() => {
     if (!token) return
 
-    request<GameMode[]>('/game/modes', {}, token)
+    gameService.getModes(token)
       .then((modes) => {
         if (modes.length === 0) return
         setGameModes(modes)
@@ -250,7 +145,7 @@ function App() {
   const loadGames = useCallback(
     async (pageNumber = gamesPage.page, limit = historyLimit) => {
       if (!user) return
-      const data = await request<PaginatedGames>(`/game/user/${user.userId}?page=${pageNumber}&limit=${limit}`, {}, token)
+      const data = await gameService.getByUser(user.userId, pageNumber, limit, token)
       setGamesPage(data)
     },
     [gamesPage.page, historyLimit, token, user],
@@ -281,6 +176,7 @@ function App() {
       setActiveGame(game)
       setMoveLog([])
       setMoveCount(0)
+      setSelectedSquare(null)
       setMatchState('playing')
       setPage('play')
       showToast('success', 'Opponent found.')
@@ -293,6 +189,7 @@ function App() {
       setActiveGame((current) => (current ? { ...current, fen: move.fen } : current))
       setMoveLog((current) => [...current, move.san])
       setMoveCount((current) => move.moveCount ?? current + 1)
+      setSelectedSquare(null)
     })
     nextSocket.on('gameOver', (payload: Partial<Game> & { status: string; reasonForEnding: string | null }) => {
       setActiveGame((current) =>
@@ -303,6 +200,8 @@ function App() {
               reasonForEnding: payload.reasonForEnding,
               playerWhite: payload.playerWhite ?? current.playerWhite,
               playerBlack: payload.playerBlack ?? current.playerBlack,
+              playerWhiteEloChange: payload.playerWhiteEloChange ?? current.playerWhiteEloChange,
+              playerBlackEloChange: payload.playerBlackEloChange ?? current.playerBlackEloChange,
             }
           : current,
       )
@@ -347,7 +246,7 @@ function App() {
   const replayMoveRows = useMemo(() => buildMoveRows(replayGame?.moves?.map((move) => move.san) ?? []), [replayGame])
 
   function logout() {
-    localStorage.removeItem('chess64.token')
+    localStorage.removeItem(TOKEN_STORAGE_KEY)
     setToken('')
     setUser(null)
     setGamesPage({ items: [], total: 0, page: 1, limit: 10, totalPages: 1 })
@@ -362,15 +261,15 @@ function App() {
     const form = new FormData(event.currentTarget)
 
     try {
-      const data = await request<{ token: string }>('/auth/login', {
-        method: 'POST',
-        body: JSON.stringify({
-          username: form.get('username'),
-          password: form.get('password'),
-        }),
+      const response = await authService.login({
+        username: String(form.get('username') ?? ''),
+        password: String(form.get('password') ?? ''),
       })
-      localStorage.setItem('chess64.token', data.token)
-      setToken(data.token)
+      if (!response.data?.token) {
+        throw new Error(response.message || 'Sign in failed.')
+      }
+      localStorage.setItem(TOKEN_STORAGE_KEY, response.data.token)
+      setToken(response.data.token)
       setPage('play')
       showToast('success', 'Signed in successfully.')
     } catch (error) {
@@ -386,13 +285,10 @@ function App() {
     const form = new FormData(event.currentTarget)
 
     try {
-      await request('/auth/register', {
-        method: 'POST',
-        body: JSON.stringify({
-          email: form.get('email'),
-          username: form.get('username'),
-          password: form.get('password'),
-        }),
+      await authService.register({
+        email: String(form.get('email') ?? ''),
+        username: String(form.get('username') ?? ''),
+        password: String(form.get('password') ?? ''),
       })
       showToast('success', 'Account created. Check your email to verify it.')
       setPage('login')
@@ -404,6 +300,10 @@ function App() {
   }
 
   function findMatch() {
+    if (!selectedMode) {
+      showToast('warning', 'Game modes are still loading.')
+      return
+    }
     const socket = socketRef.current
     if (!socket?.connected) {
       setMatchState('connecting')
@@ -415,6 +315,7 @@ function App() {
     setActiveGame(null)
     setMoveLog([])
     setMoveCount(0)
+    setSelectedSquare(null)
     socket.emit('findMatch', { gameModeId: selectedMode })
   }
 
@@ -466,9 +367,37 @@ function App() {
     })
   }
 
+  function handleSquareClick(square: Square) {
+    if (!activeGame || !canMove) return
+
+    if (!selectedSquare) {
+      if (square.piece && isMyPiece(square.piece, myColor)) {
+        setSelectedSquare(square.name)
+      }
+      return
+    }
+
+    if (selectedSquare === square.name) {
+      setSelectedSquare(null)
+      return
+    }
+
+    if (square.piece && isMyPiece(square.piece, myColor)) {
+      setSelectedSquare(square.name)
+      return
+    }
+
+    socketRef.current?.emit('makeMove', {
+      gameId: activeGame.gameId,
+      from: selectedSquare,
+      to: square.name,
+      promotion: 'q',
+    })
+  }
+
   async function openReplay(gameId: number) {
     try {
-      const game = await request<Game>(`/game/${gameId}`, {}, token)
+      const game = await gameService.getDetail(gameId, token)
       setReplayGame(game)
       setReplayIndex(0)
       setPage('replay')
@@ -530,49 +459,15 @@ function App() {
       )}
 
       {page === 'verify-email' && (
-        <AuthPanel title={verifyState === 'success' ? 'Email verified' : verifyState === 'error' ? 'Verification failed' : 'Verifying email'} caption={verifyMessage}>
-          <button className="button primary" onClick={() => setPage('login')}>Go to sign in</button>
-        </AuthPanel>
+        <VerifyEmailPage state={verifyState} message={verifyMessage} onGoToLogin={() => setPage('login')} />
       )}
 
       {!token && page === 'login' && (
-        <AuthPanel title="Welcome back" caption="Sign in to find a match and continue your run.">
-          <form className="form" onSubmit={handleLogin}>
-            <label>
-              Username or email
-              <input name="username" autoComplete="username" required />
-            </label>
-            <label>
-              Password
-              <input name="password" type="password" autoComplete="current-password" required />
-            </label>
-            <button className="button primary" disabled={authBusy}>
-              {authBusy ? 'Working...' : 'Sign in'}
-            </button>
-          </form>
-        </AuthPanel>
+        <LoginPage authBusy={authBusy} onLogin={handleLogin} />
       )}
 
       {!token && page === 'register' && (
-        <AuthPanel title="Create account" caption="Join the board and start with the default Elo rating.">
-          <form className="form" onSubmit={handleRegister}>
-            <label>
-              Email
-              <input name="email" type="email" autoComplete="email" required />
-            </label>
-            <label>
-              Username
-              <input name="username" autoComplete="username" required />
-            </label>
-            <label>
-              Password
-              <input name="password" type="password" autoComplete="new-password" required />
-            </label>
-            <button className="button primary" disabled={authBusy}>
-              {authBusy ? 'Working...' : 'Register'}
-            </button>
-          </form>
-        </AuthPanel>
+        <RegisterPage authBusy={authBusy} onRegister={handleRegister} />
       )}
 
       {token && page === 'profile' && (
@@ -619,8 +514,8 @@ function App() {
                 <article className="game-row" key={game.gameId}>
                   <div>
                     <strong>#{game.gameId}</strong>
-                    <span>White: {game.playerWhite.username} ({game.playerWhiteElo ?? game.playerWhite.elo})</span>
-                    <span>Black: {game.playerBlack.username} ({game.playerBlackElo ?? game.playerBlack.elo})</span>
+                    <span>White: {game.playerWhite.username} ({formatElo(game.playerWhiteElo ?? game.playerWhite.elo, game.playerWhiteEloChange)})</span>
+                    <span>Black: {game.playerBlack.username} ({formatElo(game.playerBlackElo ?? game.playerBlack.elo, game.playerBlackEloChange)})</span>
                   </div>
                   <span>{statusLabel(game.status)}</span>
                   <span>{reasonLabel(game.reasonForEnding)}</span>
@@ -643,24 +538,24 @@ function App() {
           <aside className="match-panel">
             <p className="eyebrow">Matchmaking</p>
             <h1>Ready for 64 squares</h1>
-            <div className="mode-list">
-              {gameModes.map((mode) => (
-                <button className={selectedMode === mode.gameModeId ? 'mode-card selected' : 'mode-card'} key={mode.gameModeId} onClick={() => setSelectedMode(mode.gameModeId)} type="button">
-                  <strong>{mode.gameModeName}</strong>
-                  <span>{mode.time}+{mode.plusPerMove}</span>
-                </button>
-              ))}
-            </div>
+            {!activeGame && (
+              <div className="mode-list">
+                {gameModes.length === 0 && <span className="empty compact">Loading game modes...</span>}
+                {gameModes.map((mode) => (
+                  <button className={selectedMode === mode.gameModeId ? 'mode-card selected' : 'mode-card'} key={mode.gameModeId} onClick={() => setSelectedMode(mode.gameModeId)} type="button">
+                    <strong>{mode.gameModeName}</strong>
+                    <span>{mode.time}+{mode.plusPerMove}</span>
+                  </button>
+                ))}
+              </div>
+            )}
             <div className="match-actions">
-              {matchState === 'waiting' ? (
+              {matchState === 'waiting' || matchState === 'connecting' ? (
                 <button className="button secondary" onClick={cancelFindMatch}>Cancel search</button>
               ) : (
-                <button className="button primary" onClick={findMatch}>Find opponent</button>
+                !activeGame && <button className="button primary" onClick={findMatch} disabled={!selectedMode}>Find opponent</button>
               )}
-            </div>
-            <div className="player-stack">
-              <PlayerCard label="White" player={activeGame?.playerWhite} snapshotElo={activeGame?.playerWhiteElo} active={turn === 'white'} />
-              <PlayerCard label="Black" player={activeGame?.playerBlack} snapshotElo={activeGame?.playerBlackElo} active={turn === 'black'} />
+              {(matchState === 'waiting' || matchState === 'connecting') && <span className="loading-inline"><span /> Searching...</span>}
             </div>
           </aside>
 
@@ -685,7 +580,9 @@ function App() {
               </div>
             </div>
 
-            <ChessBoard squares={activeBoardSquares} orientation={myColor ?? 'white'} onDragStart={handleDragStart} onDrop={handleDrop} />
+            <PlayerCard label="Opponent" player={getOpponentPlayer(activeGame, user)} snapshotElo={getOpponentElo(activeGame, user)} eloChange={getOpponentEloChange(activeGame, user)} active={activeGame ? turn !== myColor : false} />
+            <ChessBoard squares={activeBoardSquares} orientation={myColor ?? 'white'} selectedSquare={selectedSquare} onDragStart={handleDragStart} onDrop={handleDrop} onSquareClick={handleSquareClick} />
+            <PlayerCard label="You" player={getSelfPlayer(activeGame, user)} snapshotElo={getSelfElo(activeGame, user)} eloChange={getSelfEloChange(activeGame, user)} active={activeGame ? turn === myColor : false} />
           </section>
 
           <aside className="moves-panel">
@@ -702,8 +599,8 @@ function App() {
             <p className="eyebrow">Replay</p>
             <h1>Game #{replayGame.gameId}</h1>
             <div className="player-stack">
-              <PlayerCard label="White" player={replayGame.playerWhite} snapshotElo={replayGame.playerWhiteElo} active={false} />
-              <PlayerCard label="Black" player={replayGame.playerBlack} snapshotElo={replayGame.playerBlackElo} active={false} />
+              <PlayerCard label="White" player={replayGame.playerWhite} snapshotElo={replayGame.playerWhiteElo} eloChange={replayGame.playerWhiteEloChange} active={false} />
+              <PlayerCard label="Black" player={replayGame.playerBlack} snapshotElo={replayGame.playerBlackElo} eloChange={replayGame.playerBlackEloChange} active={false} />
             </div>
             <div className="panel">
               <span>{statusLabel(replayGame.status)}</span>
@@ -738,80 +635,6 @@ function App() {
   )
 }
 
-function AuthPanel({ title, caption, children }: { title: string; caption: string; children: ReactNode }) {
-  return (
-    <section className="auth-page">
-      <div className="auth-copy">
-        <p className="eyebrow">Chess 64 Squares</p>
-        <h1>{title}</h1>
-        <p>{caption}</p>
-      </div>
-      <div className="auth-card">{children}</div>
-    </section>
-  )
-}
-
-function ChessBoard({
-  squares,
-  orientation,
-  onDragStart,
-  onDrop,
-}: {
-  squares: Square[]
-  orientation: Color
-  onDragStart?: (square: Square, event: DragEvent<HTMLImageElement>) => void
-  onDrop?: (square: Square, event: DragEvent<HTMLButtonElement>) => void
-}) {
-  const files = orientation === 'black' ? ['h', 'g', 'f', 'e', 'd', 'c', 'b', 'a'] : ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h']
-  const ranks = orientation === 'black' ? ['1', '2', '3', '4', '5', '6', '7', '8'] : ['8', '7', '6', '5', '4', '3', '2', '1']
-
-  return (
-    <div className="board-frame">
-      <div className="rank-labels" aria-hidden="true">
-        {ranks.map((rank) => <span key={rank}>{rank}</span>)}
-      </div>
-      <div className="chess-board" aria-label="Chess board">
-        {squares.map((square) => (
-          <button className="square" key={square.name} onDragOver={(event) => event.preventDefault()} onDrop={(event) => onDrop?.(square, event)} type="button">
-            {square.piece && (
-              <img src={pieceImages[square.piece]} alt={square.piece} draggable={!!onDragStart} onDragStart={(event) => onDragStart?.(square, event)} />
-            )}
-          </button>
-        ))}
-      </div>
-      <div className="file-labels" aria-hidden="true">
-        {files.map((file) => <span key={file}>{file}</span>)}
-      </div>
-    </div>
-  )
-}
-
-function MoveTable({ rows, emptyText }: { rows: { number: number; white: string; black: string }[]; emptyText: string }) {
-  return (
-    <div className="moves-table">
-      <div className="moves-head"><span>#</span><span>White</span><span>Black</span></div>
-      {rows.length === 0 && <span className="empty compact">{emptyText}</span>}
-      {rows.map((row) => (
-        <div className="moves-row" key={row.number}>
-          <span>{row.number}</span>
-          <span>{row.white}</span>
-          <span>{row.black}</span>
-        </div>
-      ))}
-    </div>
-  )
-}
-
-function PlayerCard({ label, player, snapshotElo, active }: { label: string; player?: User; snapshotElo?: number; active: boolean }) {
-  return (
-    <article className={active ? 'player-card active' : 'player-card'}>
-      <span>{label}</span>
-      <strong>{player?.username ?? 'Waiting'}</strong>
-      <small>Elo {snapshotElo ?? player?.elo ?? '-'}</small>
-    </article>
-  )
-}
-
 function orientSquares(squares: Square[], color: Color | null) {
   return color === 'black' ? [...squares].reverse() : squares
 }
@@ -821,6 +644,42 @@ function getPlayerColor(game: Game | null, user: User | null): Color | null {
   if (game.playerWhite.userId === user.userId) return 'white'
   if (game.playerBlack.userId === user.userId) return 'black'
   return null
+}
+
+function getSelfPlayer(game: Game | null, user: User | null) {
+  const color = getPlayerColor(game, user)
+  if (!game || !color) return undefined
+  return color === 'white' ? game.playerWhite : game.playerBlack
+}
+
+function getOpponentPlayer(game: Game | null, user: User | null) {
+  const color = getPlayerColor(game, user)
+  if (!game || !color) return undefined
+  return color === 'white' ? game.playerBlack : game.playerWhite
+}
+
+function getSelfElo(game: Game | null, user: User | null) {
+  const color = getPlayerColor(game, user)
+  if (!game || !color) return undefined
+  return color === 'white' ? game.playerWhiteElo : game.playerBlackElo
+}
+
+function getOpponentElo(game: Game | null, user: User | null) {
+  const color = getPlayerColor(game, user)
+  if (!game || !color) return undefined
+  return color === 'white' ? game.playerBlackElo : game.playerWhiteElo
+}
+
+function getSelfEloChange(game: Game | null, user: User | null) {
+  const color = getPlayerColor(game, user)
+  if (!game || !color) return undefined
+  return color === 'white' ? game.playerWhiteEloChange : game.playerBlackEloChange
+}
+
+function getOpponentEloChange(game: Game | null, user: User | null) {
+  const color = getPlayerColor(game, user)
+  if (!game || !color) return undefined
+  return color === 'white' ? game.playerBlackEloChange : game.playerWhiteEloChange
 }
 
 function isMyPiece(piece: string, color: Color | null) {
@@ -840,7 +699,7 @@ function capitalize(value: string) {
   return value.charAt(0).toUpperCase() + value.slice(1)
 }
 
-function formatDate(value?: string) {
+function formatDate(value?: string | Date) {
   if (!value) return '-'
   return new Intl.DateTimeFormat('en-US', {
     day: '2-digit',
@@ -849,6 +708,12 @@ function formatDate(value?: string) {
     hour: '2-digit',
     minute: '2-digit',
   }).format(new Date(value))
+}
+
+function formatElo(elo?: number, change?: number) {
+  if (elo === undefined) return '-'
+  if (!change) return String(elo)
+  return `${elo} ${change > 0 ? '+' : ''}${change}`
 }
 
 export default App
