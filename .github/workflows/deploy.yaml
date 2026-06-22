@@ -1,4 +1,4 @@
-name: Deploy Chess Web to EC2
+name: chess-64-squares-web
 
 on:
   push:
@@ -10,84 +10,24 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout Source Code
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-level: '22'
-          cache: 'npm'
-
-      - name: Install Dependencies and Build
-        run: |
-          npm ci
-          npm run build
-
-      - name: Deploy to EC2 via SSH
+      - name: Deploy to EC2
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.EC2_HOST }}
           username: ${{ secrets.EC2_USER }}
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
-            sudo apt update -y
-            sudo apt install -y nginx
-            sudo systemctl enable nginx
-            sudo systemctl start nginx
+            cd ~/chess-64-squares-web
 
-            sudo mkdir -p /var/www/chess-web
-            sudo chown -R $USER:$USER /var/www/chess-web
-      - name: Copy build files to EC2
-        uses: appleboy/scp-action@v0.1.7
-        with:
-          host: ${{ secrets.EC2_HOST }}
-          username: ${{ secrets.EC2_USER }}
-          key: ${{ secrets.EC2_SSH_KEY }}
-          source: "dist/*"
-          target: "/var/www/chess-web"
-          strip_components: 1
+            git pull origin deploy
 
-      - name: Configure Nginx and Reload
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ secrets.EC2_HOST }}
-          username: ${{ secrets.EC2_USER }}
-          key: ${{ secrets.EC2_SSH_KEY }}
-          script: |
+            npm ci
+            npm run build
+
+            sudo rm -rf /var/www/chess-web/*
+            sudo cp -r dist/* /var/www/chess-web/
+
             sudo chown -R www-data:www-data /var/www/chess-web
 
-            sudo tee /etc/nginx/sites-available/chess > /dev/null << 'EOF'
-            server {
-                listen 80;
-                server_name _;
-
-                root /var/www/chess-web;
-                index index.html;
-
-                location / {
-                    try_files $uri $uri/ /index.html;
-                }
-
-                location /api/ {
-                    proxy_pass http://localhost:8000;
-                    proxy_http_version 1.1;
-                    proxy_set_header Host $host;
-                    proxy_set_header X-Real-IP $remote_addr;
-                    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-                }
-
-                location /socket.io/ {
-                    proxy_pass http://localhost:8000;
-                    proxy_http_version 1.1;
-                    proxy_set_header Upgrade $http_upgrade;
-                    proxy_set_header Connection "upgrade";
-                    proxy_set_header Host $host;
-                }
-            }
-            EOF
-
-            sudo rm -f /etc/nginx/sites-enabled/default
-            sudo ln -sf /etc/nginx/sites-available/chess /etc/nginx/sites-enabled/
-
-            sudo nginx -t && sudo systemctl reload nginx
+            sudo nginx -t
+            sudo systemctl reload nginx
