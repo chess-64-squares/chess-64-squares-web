@@ -44,4 +44,5 @@ jobs:
           script: |
             sudo rm -rf /var/www/chess-web
             sudo mv /tmp/chess-deploy /var/www/chess-web
+            sudo chown -R www-data:www-data /var/www/chess-web
             sudo nginx -t && sudo systemctl reload nginx
