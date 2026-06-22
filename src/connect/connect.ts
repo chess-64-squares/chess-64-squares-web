@@ -1,7 +1,8 @@
 import { ApiResponse } from "../dto/response/api-response";
 export const TOKEN_STORAGE_KEY = "chess64.token";
-export const API_BASE_URL = (import.meta.env.VITE_SERVER_URL || "http://localhost:8000/api/v1") as string;
-export const SOCKET_URL = buildSocketUrl((import.meta.env.VITE_SOCKET_URL || "http://localhost:8000/game") as string);
+export const API_BASE_URL = import.meta.env.VITE_SERVER_URL as string;
+export const SOCKET_URL = buildSocketUrl(import.meta.env.VITE_SOCKET_URL as string);
+
 
 function buildSocketUrl(value: string) {
     const withoutApiPrefix = value.replace(/\/api\/v\d+\/?$/i, "");
