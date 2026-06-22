@@ -33,7 +33,6 @@ jobs:
           key: ${{ secrets.EC2_SSH_KEY }}
           source: "dist/"
           target: "/tmp/chess-deploy"
-          strip_components: 1
 
       - name: Deploy on EC2
         uses: appleboy/ssh-action@v1.0.3
@@ -43,8 +42,6 @@ jobs:
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
             sudo rm -rf /var/www/chess-web
-            sudo mv /tmp/chess-deploy /var/www/chess-web
+            sudo mv /tmp/chess-deploy/dist /var/www/chess-web
             sudo chown -R www-data:www-data /var/www/chess-web
-            sudo rm -f /etc/nginx/sites-enabled/default
-            sudo ln -s /etc/nginx/sites-available/chess /etc/nginx/sites-enabled/
-            sudo systemctl reload nginx
+            sudo nginx -t && sudo systemctl reload nginx
