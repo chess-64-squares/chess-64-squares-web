@@ -45,4 +45,6 @@ jobs:
             sudo rm -rf /var/www/chess-web
             sudo mv /tmp/chess-deploy /var/www/chess-web
             sudo chown -R www-data:www-data /var/www/chess-web
-            sudo nginx -t && sudo systemctl reload nginx
+            sudo rm -f /etc/nginx/sites-enabled/default
+            sudo ln -s /etc/nginx/sites-available/chess /etc/nginx/sites-enabled/
+            sudo systemctl reload nginx
